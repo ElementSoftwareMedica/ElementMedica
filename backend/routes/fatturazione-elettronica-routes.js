@@ -127,7 +127,6 @@ const syncAppuntamentoAfterBilling = async (fatturaInput, tenantId, personId, mo
         pagamentoAnticipato: true,
         pagamentoDataOra: new Date(),
         ...(['COMPLETATO', 'FATTURATO'].includes(appuntamento.stato) ? { stato: 'FATTURATO' } : {}),
-        updatedBy: personId || null,
       }
     });
     await prisma.movimentoContabile.updateMany({
@@ -158,7 +157,6 @@ const syncAppuntamentoAfterBilling = async (fatturaInput, tenantId, personId, mo
         stato: 'COMPLETATO',
         pagamentoAnticipato: false,
         pagamentoDataOra: null,
-        updatedBy: personId || null,
       }
     });
   }

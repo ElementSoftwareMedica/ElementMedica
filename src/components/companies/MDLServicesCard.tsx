@@ -63,6 +63,7 @@ import {
     ConsulenzaMDL,
     UscitaMC,
     MedicoDisponibileUscita,
+    VoceUnaTantum,
     VoceTariffario,
     StatoConsulenzaMDL,
     STATO_CONSULENZA_LABELS,
@@ -770,7 +771,8 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
     const [showUscitaMCModal, setShowUscitaMCModal] = useState(false);
     const [savingUscitaMC, setSavingUscitaMC] = useState(false);
     const [mediciDisponibili, setMediciDisponibili] = useState<MedicoDisponibileUscita[]>([]);
-    const [newUscitaMC, setNewUscitaMC] = useState({ data: new Date().toISOString().split('T')[0], medicoId: '', note: '' });
+    const [vociUnaTantum, setVociUnaTantum] = useState<VoceUnaTantum[]>([]);
+    const [newUscitaMC, setNewUscitaMC] = useState({ data: new Date().toISOString().split('T')[0], medicoId: '', voceTariffarioId: '', note: '' });
 
     // Consulenze MDL state
     const [consulenze, setConsulenze] = useState<ConsulenzaMDL[]>([]);
@@ -821,12 +823,14 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
             setLoadingUsciteMC(true);
             Promise.all([
                 usciteMCApi.getAll({ companyTenantProfileId }),
-                usciteMCApi.getMediciDisponibili(companyTenantProfileId)
+                usciteMCApi.getMediciDisponibili(companyTenantProfileId),
+                usciteMCApi.getVociUnaTantum(companyTenantProfileId)
             ])
-                .then(([usciteRes, mediciRes]) => {
+                .then(([usciteRes, mediciRes, vociRes]) => {
                     setUsciteMC(usciteRes.data || []);
                     const medici = mediciRes.data || [];
                     setMediciDisponibili(medici);
+                    setVociUnaTantum(vociRes.data || []);
                     // Auto-seleziona il medico nominato solo se l'utente non ha già scelto
                     const primario = medici.find(m => m.isPrimario);
                     if (primario) setNewUscitaMC(prev => ({ ...prev, medicoId: prev.medicoId || primario.id }));
@@ -1965,7 +1969,7 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                     >
                         <div className="flex items-center">
                             <MapPin className="h-4 w-4 text-teal-600 dark:text-teal-400 mr-2" />
-                            <span className="font-medium text-gray-900 dark:text-gray-50">Uscite Medico Competente</span>
+                            <span className="font-medium text-gray-900 dark:text-gray-50">Uscite MC e altre spese</span>
                             <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
                                 ({usciteMC.filter(u => u.stato !== 'ANNULLATA').length} registrate)
                             </span>
@@ -2026,6 +2030,9 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                                                                 : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
                                                         )}>
                                                             {u.stato === 'DA_FATTURARE' ? 'Da Fatturare' : 'Fatturata'}
+                                                        </span>
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300">
+                                                            {u.voceTariffario?.nome || (u.voceTariffarioId ? 'Spesa' : 'Uscita MC')}
                                                         </span>
                                                     </div>
                                                     {u.medico && (
@@ -2305,7 +2312,25 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                         </div>
                         <div className="p-4 space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data uscita *</label>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo di spesa</label>
+                                <ElegantSelect
+                                    value={newUscitaMC.voceTariffarioId}
+                                    onChange={(v) => setNewUscitaMC(p => ({ ...p, voceTariffarioId: v }))}
+                                    options={[
+                                        { value: '', label: 'Uscita Medico Competente (standard)' },
+                                        ...vociUnaTantum.map(v => ({
+                                            value: v.id,
+                                            label: `${v.nome || v.tipo}${v.prezzoBase != null ? ` — € ${Number(v.prezzoBase).toFixed(2)}` : ''}`
+                                        }))
+                                    ]}
+                                />
+                                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                    Voci "Una tantum" del tariffario aziendale in vigore. Lascia "standard" per l'uscita MC.
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data *</label>
                                 <DatePickerElegante
                                     value={newUscitaMC.data || null}
                                     onChange={(d) => setNewUscitaMC(p => ({ ...p, data: d ? d.toISOString().split('T')[0] : '' }))}
@@ -2367,12 +2392,13 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
                                             companyTenantProfileId,
                                             data: newUscitaMC.data,
                                             ...(newUscitaMC.medicoId && { medicoId: newUscitaMC.medicoId }),
+                                            ...(newUscitaMC.voceTariffarioId && { voceTariffarioId: newUscitaMC.voceTariffarioId }),
                                             ...(newUscitaMC.note?.trim() && { note: newUscitaMC.note.trim() })
                                         });
                                         setUsciteMC(prev => [res.data, ...prev]);
                                         setShowUscitaMCModal(false);
-                                        setNewUscitaMC({ data: new Date().toISOString().split('T')[0], medicoId: '', note: '' });
-                                        showToast({ type: 'success', message: 'Uscita MC registrata — movimento contabile generato automaticamente' });
+                                        setNewUscitaMC({ data: new Date().toISOString().split('T')[0], medicoId: '', voceTariffarioId: '', note: '' });
+                                        showToast({ type: 'success', message: 'Spesa registrata — movimento contabile generato automaticamente' });
                                     } catch {
                                         showToast({ type: 'error', message: 'Errore nella registrazione dell\'uscita MC' });
                                     } finally {

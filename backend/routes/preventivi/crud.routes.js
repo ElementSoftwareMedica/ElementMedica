@@ -56,7 +56,7 @@ router.get('/',
   authenticate,
   [
     query('page').optional().isInt({ min: 1 }).toInt(),
-    query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+    query('limit').optional().isInt({ min: 1, max: 500 }).toInt(),
     query('stato').optional().isIn(['BOZZA', 'INVIATO', 'VISUALIZZATO', 'ACCETTATO', 'RIFIUTATO', 'FATTURATO', 'ANNULLATO', 'ARCHIVIATO']),
     query('tipoServizio').optional().isIn(['CORSO', 'DVR', 'RSPP', 'MEDICO_COMPETENTE', 'CONSULENZA', 'COMPENSO_FORMATORE', 'ALTRO']),
     query('clienteId').optional().isUUID(),

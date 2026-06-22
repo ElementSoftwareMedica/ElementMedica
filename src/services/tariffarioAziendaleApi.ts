@@ -1135,8 +1135,10 @@ export interface UscitaMC {
     companyTenantProfileId: string;
     siteId?: string | null;
     medicoId?: string | null;
+    voceTariffarioId?: string | null;
     site?: { id: string; siteName: string } | null;
     medico?: { id: string; firstName: string; lastName: string; gender?: string } | null;
+    voceTariffario?: { id: string; nome?: string | null; tipo: string } | null;
     data: string;
     note?: string | null;
     stato: StatoUscitaMC;
@@ -1155,10 +1157,20 @@ export interface MedicoDisponibileUscita {
     isPrimario: boolean;
 }
 
+export interface VoceUnaTantum {
+    id: string;
+    tipo: TipoVoceTariffario;
+    nome?: string | null;
+    prezzoBase: number | string;
+    ivaAliquota: number | string;
+    hasCompenso: boolean;
+}
+
 export interface CreateUscitaMCPayload {
     companyTenantProfileId: string;
     siteId?: string;
     medicoId?: string;
+    voceTariffarioId?: string;
     data: string;
     note?: string;
 }
@@ -1182,6 +1194,12 @@ export const usciteMCApi = {
         companyTenantProfileId: string
     ): Promise<{ success: boolean; data: MedicoDisponibileUscita[] }> {
         return apiGet(`${USCITE_MC_URL}/medici-disponibili?companyTenantProfileId=${companyTenantProfileId}`);
+    },
+
+    async getVociUnaTantum(
+        companyTenantProfileId: string
+    ): Promise<{ success: boolean; data: VoceUnaTantum[] }> {
+        return apiGet(`${USCITE_MC_URL}/voci-una-tantum?companyTenantProfileId=${companyTenantProfileId}`);
     },
 
     async create(data: CreateUscitaMCPayload): Promise<{ success: boolean; data: UscitaMC }> {

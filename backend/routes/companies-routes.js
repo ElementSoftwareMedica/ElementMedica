@@ -7,6 +7,7 @@ import middleware from '../middleware/auth.js';
 import { checkAdvancedPermission, filterDataByPermissions, requireOwnCompany } from '../middleware/advanced-permissions.js';
 import { roleDataFilter, filterResponseFields } from '../middleware/role-data-filter.js';
 import TariffarioAziendaleService from '../services/management/TariffarioAziendaleService.js';
+import MovimentoContabileGenerator from '../services/management/MovimentoContabileGenerator.js';
 import RisultatiAnonimiService from '../services/clinical/RisultatiAnonimiService.js';
 import RiunioniPeriodicheService from '../services/clinical/RiunioniPeriodicheService.js';
 import pdfService from '../services/pdfService.js';
@@ -1644,6 +1645,48 @@ router.get('/:id/billing-summary',
         companyId: req.params?.id
       });
       res.status(500).json({ success: false, error: 'Errore nel recupero del riepilogo fatturazione' });
+    }
+  }
+);
+
+// Genera movimenti contabili per tutti gli eventi orfani dell'azienda
+router.post('/:id/generate-movements',
+  authenticateToken,
+  checkAdvancedPermission('companies', 'write'),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tenantId = getEffectiveTenantId(req);
+
+      // Risolvi il CompanyTenantProfile per questa azienda + tenant
+      const profile = await prisma.companyTenantProfile.findFirst({
+        where: { companyId: id, tenantId, deletedAt: null },
+        select: { id: true }
+      });
+
+      if (!profile) {
+        return res.status(404).json({ success: false, error: 'Azienda non trovata per questo tenant' });
+      }
+
+      const result = await MovimentoContabileGenerator.generaTutti(
+        profile.id,
+        tenantId,
+        req.person?.id || null
+      );
+
+      res.json({
+        success: true,
+        data: { totaleCreati: result.movimenti.length },
+        warnings: result.warnings || []
+      });
+    } catch (error) {
+      logger.error('Failed to generate company movements', {
+        component: 'companies-routes',
+        action: 'generateMovements',
+        error: error.message,
+        companyId: req.params?.id
+      });
+      res.status(500).json({ success: false, error: 'Errore nella generazione dei movimenti contabili' });
     }
   }
 );

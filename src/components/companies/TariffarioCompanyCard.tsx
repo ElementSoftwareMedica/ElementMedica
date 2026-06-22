@@ -114,6 +114,8 @@ const TIPO_VOCE_LABELS: Record<string, string> = {
     DVR_AGGIORNAMENTO_SENZA_MODIFICHE: 'Agg. DVR (senza mod.)',
     NOMINA_MC: 'Nomina MC',
     NOMINA_RSPP: 'Nomina RSPP',
+    USCITA_MC: 'Uscita MC',
+    CONSULENZA: 'Consulenza MDL',
 };
 
 // Icone per tipo voce
@@ -128,6 +130,8 @@ const TIPO_VOCE_ICONS: Record<string, React.ElementType> = {
     DVR_AGGIORNAMENTO_SENZA_MODIFICHE: FileText,
     NOMINA_MC: Users,
     NOMINA_RSPP: Users,
+    USCITA_MC: Briefcase,
+    CONSULENZA: Briefcase,
 };
 
 // Labels per frequenza

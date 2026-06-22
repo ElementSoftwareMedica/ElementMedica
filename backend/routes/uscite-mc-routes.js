@@ -71,6 +71,27 @@ router.get('/medici-disponibili', requirePermission('tariffari:read'), async (re
 });
 
 /**
+ * GET /api/v1/uscite-mc/voci-una-tantum
+ * Voci tariffario "Una tantum" del tariffario in vigore per l'azienda
+ */
+router.get('/voci-una-tantum', requirePermission('tariffari:read'), async (req, res) => {
+    try {
+        const tenantId = getEffectiveTenantId(req);
+        const { companyTenantProfileId } = req.query;
+
+        if (!companyTenantProfileId) {
+            return res.status(400).json({ success: false, error: 'companyTenantProfileId è obbligatorio' });
+        }
+
+        const voci = await UscitaMCService.getVociUnaTantum(companyTenantProfileId, tenantId);
+        res.json({ success: true, data: voci });
+    } catch (error) {
+        logger.error({ error: error.message }, 'Errore GET voci-una-tantum uscite-mc');
+        res.status(500).json({ success: false, error: 'Errore interno del server' });
+    }
+});
+
+/**
  * GET /api/v1/uscite-mc/:id
  * Dettaglio singola uscita MC
  */

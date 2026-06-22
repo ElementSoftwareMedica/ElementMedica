@@ -1865,6 +1865,29 @@ const MovimentoContabileGenerator = {
                 }
             }
 
+            // ── 4c. Uscite MC orfane ──────────────────────────────────────────────────
+            const usciteMCOrfane = await prisma.uscitaMC.findMany({
+                where: {
+                    companyTenantProfileId,
+                    tenantId,
+                    deletedAt: null,
+                    stato: { notIn: ['ANNULLATA'] },
+                    movimentiContabili: { none: {} },
+                },
+                take: LIMIT,
+                orderBy: { data: 'desc' },
+            });
+
+            const uResults = await Promise.allSettled(
+                usciteMCOrfane.map(u => this.generaPerUscitaMC(u, tenantId, createdBy))
+            );
+            for (const r of uResults) {
+                if (r.status === 'fulfilled') {
+                    result.movimenti.push(...r.value.movimenti);
+                    result.warnings.push(...r.value.warnings);
+                }
+            }
+
             // ── 5. Visite MDL orfane ──────────────────────────────────────────────────
             //   Prima trova le person che lavorano per questa azienda
             const personIds = await prisma.personTenantProfile.findMany({
@@ -2069,13 +2092,23 @@ const MovimentoContabileGenerator = {
             const existing = await esisteMovimento({ uscitaMCId: uscitaMC.id, direzione: 'ENTRATA', tenantId });
             if (existing) { result.movimenti.push(existing); return result; }
 
-            const { voce } = await getVocePerTipo(uscitaMC.companyTenantProfileId, tenantId, 'USCITA_MC');
+            // Voce: se l'utente ha scelto una voce "Una tantum" specifica, usa quella;
+            // altrimenti default sulla voce USCITA_MC del tariffario.
+            let voce;
+            if (uscitaMC.voceTariffarioId) {
+                const assoc = await getTariffario(uscitaMC.companyTenantProfileId, tenantId, uscitaMC.data || new Date());
+                voce = assoc?.tariffario?.voci?.find(v => v.id === uscitaMC.voceTariffarioId) || null;
+            } else {
+                ({ voce } = await getVocePerTipo(uscitaMC.companyTenantProfileId, tenantId, 'USCITA_MC'));
+            }
+
+            const voceLabel = voce?.nome || (uscitaMC.voceTariffarioId ? 'Spesa' : 'Uscita MC');
 
             let prezzoNetto = voce ? parseFloat(voce.prezzoBase) : 0;
             if (!prezzoNetto) {
                 result.warnings.push({
                     type: 'MISSING_PREZZO',
-                    message: 'Nessun importo definito per l\'uscita MC. Il movimento è stato creato con €0. Aggiorna il tariffario aziendale (voce USCITA MC).',
+                    message: `Nessun importo definito per "${voceLabel}". Il movimento è stato creato con €0. Aggiorna il tariffario aziendale.`,
                     solutionUrl: '/tariffari-aziendali',
                     field: 'importoNetto',
                 });
@@ -2084,6 +2117,10 @@ const MovimentoContabileGenerator = {
             const aliquotaIva = voce ? parseFloat(voce.ivaAliquota) : 22;
             const { importoNetto, importoIva, importoLordo } = calcolaImporti(prezzoNetto, aliquotaIva);
             const statoMovimento = _statoPerData(uscitaMC.data);
+            const dataLabel = new Date(uscitaMC.data).toLocaleDateString('it-IT');
+            const descrizioneEntrata = uscitaMC.voceTariffarioId
+                ? `${voceLabel} – ${dataLabel}`
+                : `Uscita MC – ${dataLabel}`;
 
             const movEntrata = await prisma.movimentoContabile.create({
                 data: {
@@ -2100,7 +2137,7 @@ const MovimentoContabileGenerator = {
                     importoLordo,
                     aliquotaIva,
                     dataEsecuzione: uscitaMC.data,
-                    descrizione: `Uscita MC – ${new Date(uscitaMC.data).toLocaleDateString('it-IT')}`,
+                    descrizione: descrizioneEntrata,
                     branchType: 'MEDICA',
                     tenantId,
                     createdBy,
@@ -2123,7 +2160,7 @@ const MovimentoContabileGenerator = {
                         compensoTipo: compenso.tipo,
                         importoRiferimento: importoNetto,
                         dataEsecuzione: uscitaMC.data,
-                        descrizione: `Compenso uscita MC [${compenso.fonte}]`,
+                        descrizione: `Compenso ${voceLabel} [${compenso.fonte}]`,
                         stato: statoMovimento,
                         tenantId,
                         createdBy,

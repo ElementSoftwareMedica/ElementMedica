@@ -486,22 +486,28 @@ export const CalendarioPage: React.FC = () => {
     }, [ambulatoriData]);
 
     // Calculate date range for queries - based ONLY on selectedDates
-    // The calendar shows only the days explicitly selected in the mini calendar
+    // The calendar shows only the days explicitly selected in the mini calendar.
+    //
+    // IMPORTANT: the fetch range is padded by ±1 day around min/max selected dates.
+    // The query date strings (YYYY-MM-DD) go through several timezone conversions
+    // (local → ISO date → backend parseToStartOfDay/parseToEndOfDay), and an appointment
+    // sitting near a boundary day could be excluded by a UTC vs local edge.
+    // Padding guarantees the appointment is always fetched; the per-column render below
+    // still places each event precisely with isSameDay(), so the extra days never render.
     const dateRange = useMemo(() => {
-        if (selectedDates.length === 0) {
-            // If no dates selected, use today only
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const todayEnd = new Date(today);
-            todayEnd.setHours(23, 59, 59, 999);
-            return { start: today, end: todayEnd };
+        const baseStart = new Date();
+        const baseEnd = new Date();
+        if (selectedDates.length > 0) {
+            const sortedDates = [...selectedDates].sort((a, b) => a.getTime() - b.getTime());
+            baseStart.setTime(sortedDates[0].getTime());
+            baseEnd.setTime(sortedDates[sortedDates.length - 1].getTime());
         }
 
-        // Use min/max of selected dates as range
-        const sortedDates = [...selectedDates].sort((a, b) => a.getTime() - b.getTime());
-        const start = new Date(sortedDates[0]);
+        const start = new Date(baseStart);
+        start.setDate(start.getDate() - 1); // pad one day before
         start.setHours(0, 0, 0, 0);
-        const end = new Date(sortedDates[sortedDates.length - 1]);
+        const end = new Date(baseEnd);
+        end.setDate(end.getDate() + 1); // pad one day after
         end.setHours(23, 59, 59, 999);
 
         return { start, end };
@@ -917,7 +923,7 @@ export const CalendarioPage: React.FC = () => {
             // When not filtering, all days show same ambulatori
             const map = new Map<string, typeof displayAmbulatori>();
             effectiveDisplayDays.forEach(day => {
-                map.set(day.toISOString().split('T')[0], displayAmbulatori);
+                map.set(toISODateString(day), displayAmbulatori);
             });
             return map;
         }
@@ -925,7 +931,7 @@ export const CalendarioPage: React.FC = () => {
         // Build map of ambulatori per day - only those with disponibilità
         const map = new Map<string, typeof displayAmbulatori>();
         effectiveDisplayDays.forEach(day => {
-            const dayKey = day.toISOString().split('T')[0];
+            const dayKey = toISODateString(day);
             const ambulatoriWithDisp = displayAmbulatori.filter(amb =>
                 filteredEvents.disponibilita.some(d =>
                     (d.ambulatorioId === amb.id || !d.ambulatorioId) && isSameDay(d.start, day)
@@ -943,7 +949,7 @@ export const CalendarioPage: React.FC = () => {
         let totalColumns = 0;
         let maxColumnsInDay = 0;
         effectiveDisplayDays.forEach(day => {
-            const dayKey = day.toISOString().split('T')[0];
+            const dayKey = toISODateString(day);
             const dayAmbulatori = ambulatoriPerDay.get(dayKey) || [];
             totalColumns += dayAmbulatori.length;
             maxColumnsInDay = Math.max(maxColumnsInDay, dayAmbulatori.length);
@@ -1945,9 +1951,9 @@ export const CalendarioPage: React.FC = () => {
                         <div ref={headerRef}>
                             {/* Day Headers */}
                             <div className="flex bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10" style={{ top: columnInfo.isTooMany ? '41px' : 0 }}>
-                                <div className="flex-shrink-0 bg-gray-50 dark:bg-gray-700 border-r border-gray-200 dark:border-gray-700" style={{ width: `${TIME_COLUMN_WIDTH}px` }} />
+                                <div className="flex-shrink-0 bg-gray-50 dark:bg-gray-700 border-r border-gray-200 dark:border-gray-700 sticky left-0 z-20" style={{ width: `${TIME_COLUMN_WIDTH}px` }} />
                                 {effectiveDisplayDays.map((day, dayIdx) => {
-                                    const dayKey = day.toISOString().split('T')[0];
+                                    const dayKey = toISODateString(day);
                                     const dayAmbulatori = ambulatoriPerDay.get(dayKey) || [];
                                     return (
                                         <div
@@ -2017,7 +2023,7 @@ export const CalendarioPage: React.FC = () => {
                         <div className="flex">
                             <TimeColumn startHour={viewStartHour} endHour={viewEndHour} hourHeight={effectiveHourHeight} />
                             {effectiveDisplayDays.map((day, dayIdx) => {
-                                const dayKey = day.toISOString().split('T')[0];
+                                const dayKey = toISODateString(day);
                                 const dayAmbulatori = ambulatoriPerDay.get(dayKey) || [];
                                 return (
                                     <div
@@ -2098,7 +2104,7 @@ export const CalendarioPage: React.FC = () => {
                         {/* Medico Headers Container */}
                         <div ref={headerRef}>
                             <div className="flex bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10" style={{ top: medicoColumnInfo.isTooMany ? '41px' : 0 }}>
-                                <div className="flex-shrink-0 bg-gray-50 dark:bg-gray-700 border-r border-gray-200 dark:border-gray-700" style={{ width: `${TIME_COLUMN_WIDTH}px` }} />
+                                <div className="flex-shrink-0 bg-gray-50 dark:bg-gray-700 border-r border-gray-200 dark:border-gray-700 sticky left-0 z-20" style={{ width: `${TIME_COLUMN_WIDTH}px` }} />
                                 {displayMedici.map((medico, medicoIdx) => {
                                     const color = medicoColors.get(medico.id);
                                     const firstName = medico.firstName || medico.nome || '';

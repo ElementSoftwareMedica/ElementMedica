@@ -46,7 +46,7 @@ export const TimeColumn: React.FC<TimeColumnProps> = ({
 
     return (
         <div
-            className="flex-shrink-0 bg-gray-50 border-r border-gray-200"
+            className="flex-shrink-0 bg-gray-50 dark:bg-gray-700 border-r border-gray-200 sticky left-0 z-40"
             style={{ width: `${TIME_COLUMN_WIDTH}px` }}
         >
             {Array.from({ length: hours }, (_, i) => i + startHour).map(hour => (

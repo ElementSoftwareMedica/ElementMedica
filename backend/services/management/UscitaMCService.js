@@ -49,7 +49,8 @@ const UscitaMCService = {
             where: { id, tenantId, deletedAt: null },
             include: {
                 site: { select: { id: true, siteName: true } },
-                medico: { select: { id: true, firstName: true, lastName: true, gender: true } }
+                medico: { select: { id: true, firstName: true, lastName: true, gender: true } },
+                voceTariffario: { select: { id: true, nome: true, tipo: true } }
             }
         });
         if (!uscita) throw new Error('Uscita MC non trovata');
@@ -91,6 +92,41 @@ const UscitaMCService = {
     },
 
     /**
+     * Lista delle voci tariffario "Una tantum" del tariffario aziendale in vigore,
+     * selezionabili come spesa da rendicontare insieme (o in alternativa) all'uscita MC.
+     */
+    async getVociUnaTantum(companyTenantProfileId, tenantId, referenceDate = new Date()) {
+        const baseWhere = { companyTenantProfileId, tenantId, attivo: true, deletedAt: null };
+
+        // Tariffario in vigore alla data di riferimento (non scaduto, non futuro)
+        let assoc = await prisma.tariffarioCompanyAssociation.findFirst({
+            where: {
+                ...baseWhere,
+                validoDa: { lte: referenceDate },
+                OR: [{ validoA: null }, { validoA: { gte: referenceDate } }],
+            },
+            include: { tariffario: { include: { voci: { where: { attivo: true, deletedAt: null } } } } },
+            orderBy: { validoDa: 'desc' },
+        });
+
+        if (!assoc) return [];
+
+        return (assoc.tariffario?.voci || [])
+            // Solo voci "Una tantum"; la voce USCITA_MC è già rappresentata
+            // dall'opzione "standard" nel modal, quindi va esclusa dall'elenco.
+            .filter(v => v.frequenza === 'UNA_TANTUM' && v.tipo !== 'USCITA_MC')
+            .map(v => ({
+                id: v.id,
+                tipo: v.tipo,
+                nome: v.nome,
+                prezzoBase: v.prezzoBase,
+                ivaAliquota: v.ivaAliquota,
+                hasCompenso: v.compensoProfessionistaTipo != null,
+            }))
+            .sort((a, b) => (a.nome || a.tipo).localeCompare(b.nome || b.tipo));
+    },
+
+    /**
      * Crea una nuova uscita MC
      */
     async create(data, tenantId) {
@@ -98,6 +134,7 @@ const UscitaMCService = {
             companyTenantProfileId,
             siteId,
             medicoId,
+            voceTariffarioId,
             data: dataUscita,
             note
         } = data;
@@ -124,11 +161,21 @@ const UscitaMCService = {
             if (!nomina) throw new Error('Medico non trovato o non autorizzato per questa azienda');
         }
 
+        // Se è stata scelta una voce "Una tantum" diversa, verifica che appartenga
+        // al tariffario in vigore per questa azienda
+        if (voceTariffarioId) {
+            const vociValide = await this.getVociUnaTantum(companyTenantProfileId, tenantId);
+            if (!vociValide.some(v => v.id === voceTariffarioId)) {
+                throw new Error('Voce tariffario non valida per il tariffario in vigore');
+            }
+        }
+
         const uscita = await prisma.uscitaMC.create({
             data: {
                 companyTenantProfileId,
                 ...(siteId && { siteId }),
                 ...(medicoId && { medicoId }),
+                ...(voceTariffarioId && { voceTariffarioId }),
                 data: new Date(dataUscita),
                 ...(note && { note: note.trim() }),
                 stato: 'DA_FATTURARE',
@@ -136,7 +183,8 @@ const UscitaMCService = {
             },
             include: {
                 site: { select: { id: true, siteName: true } },
-                medico: { select: { id: true, firstName: true, lastName: true, gender: true } }
+                medico: { select: { id: true, firstName: true, lastName: true, gender: true } },
+                voceTariffario: { select: { id: true, nome: true, tipo: true } }
             }
         });
 

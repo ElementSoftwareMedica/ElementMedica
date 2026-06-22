@@ -177,7 +177,11 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       const socket = io(WS_URL, {
         path: '/ws/notifications',
         auth: { token },
-        transports: ['websocket', 'polling'],
+        // Polling-first: behind nginx the connection is established via HTTP long-polling
+        // (which proxies reliably) and then transparently upgraded to WebSocket using the
+        // session id. Listing 'websocket' first made the client attempt a raw session-less
+        // WS handshake that fails noisily in the console before falling back to polling.
+        transports: ['polling', 'websocket'],
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
