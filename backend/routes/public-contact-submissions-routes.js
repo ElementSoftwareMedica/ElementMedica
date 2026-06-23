@@ -57,6 +57,13 @@ router.post('/',
                 finalMessage = `Variante corso: ${courseVariant || selectedVariant}`;
             }
 
+            // Preserva tutti i valori inviati dal form (per la vista submissions per-campo).
+            // Esclude i campi di controllo non legati al contenuto del form.
+            const { privacyAccepted: _pa, marketingAccepted: _ma, ...rawFields } = req.body || {};
+            const formData = Object.fromEntries(
+                Object.entries(rawFields).filter(([, v]) => v !== undefined && v !== null && v !== '')
+            );
+
             // Prepara i dati per il controller esistente
             req.body = {
                 type: 'CONTACT', // Usiamo CONTACT come tipo valido dell'enum SubmissionType
@@ -66,6 +73,7 @@ router.post('/',
                 company,
                 subject: finalSubject,
                 message: finalMessage,
+                formData,
                 source: courseTitle ? 'public_course_page' : 'public_contact_form',
                 privacyAccepted: privacyAccepted === true || privacyAccepted === 'true',
                 marketingAccepted: marketingAccepted === true || marketingAccepted === 'true',

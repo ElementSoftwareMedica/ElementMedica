@@ -22,6 +22,7 @@ const createSubmission = async (req, res) => {
       subject,
       message,
       metadata = {},
+      formData = null,
       source = 'public_website',
       privacyAccepted = false,
       marketingAccepted = false
@@ -160,6 +161,8 @@ const createSubmission = async (req, res) => {
           ...metadata,
           ...(formTemplateId && { formTemplateId })
         },
+        // Preserva i valori per-campo del form (per la vista submissions)
+        formData: formData && typeof formData === 'object' ? formData : null,
         ipAddress: clientIp,
         userAgent,
         source,

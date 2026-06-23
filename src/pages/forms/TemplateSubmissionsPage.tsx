@@ -65,6 +65,24 @@ const lookupByKey = (obj: any, key: string): any => {
   return found !== undefined ? obj[found] : undefined;
 };
 const isBlank = (v: any) => v === undefined || v === null || v === '';
+// Fallback: alcune submission (form CONTACT pubblici) non hanno formData ma i dati
+// sono nei campi standard. Mappa i nomi-campo comuni → valore derivato.
+const standardFieldFallback = (submission: any, fieldName: string): any => {
+  const norm = normalizeKey(fieldName);
+  const md = submission.metadata || {};
+  const fullName = String(submission.name || '').trim();
+  const parts = fullName.split(/\s+/).filter(Boolean);
+  if (['nome', 'firstname', 'name'].includes(norm)) return parts[0] || fullName || undefined;
+  if (['cognome', 'lastname', 'surname'].includes(norm)) return parts.slice(1).join(' ') || undefined;
+  if (['nomecompleto', 'fullname', 'nominativo'].includes(norm)) return fullName || undefined;
+  if (['email', 'mail', 'posta', 'emailaddress', 'indirizzoemail'].includes(norm)) return submission.email || undefined;
+  if (['telefono', 'phone', 'cellulare', 'tel', 'mobile', 'recapito'].includes(norm)) return submission.phone || undefined;
+  if (['messaggio', 'message', 'note', 'richiesta', 'testo'].includes(norm)) return submission.message || undefined;
+  if (['azienda', 'company', 'ragionesociale', 'societa'].includes(norm)) return submission.company || undefined;
+  if (['oggetto', 'subject'].includes(norm)) return submission.subject || undefined;
+  if (['servizio', 'requesttype', 'tipo', 'tiporichiesta', 'service', 'serviziorichiesto'].includes(norm)) return md.requestType || md.serviceType || undefined;
+  return undefined;
+};
 const resolveFieldValue = (submission: any, field: any): any => {
   if (!submission || !field) return undefined;
   const fd = submission.formData || {};
@@ -74,6 +92,8 @@ const resolveFieldValue = (submission: any, field: any): any => {
   for (const key of candidates) { const v = lookupByKey(fd, key); if (!isBlank(v)) return v; }
   for (const key of candidates) { const v = lookupByKey(md, key); if (!isBlank(v)) return v; }
   for (const key of candidates) { if (!isBlank(submission[key])) return submission[key]; }
+  // Fallback su campi standard (submission senza formData)
+  for (const key of candidates) { const v = standardFieldFallback(submission, key); if (!isBlank(v)) return v; }
   return undefined;
 };
 const FALLBACK_NAMES = ['utente anonimo', 'anonimo', 'submission da form', ''];
