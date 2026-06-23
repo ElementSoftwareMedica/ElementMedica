@@ -1905,14 +1905,13 @@ const TariffarioAziendaleService = {
         // I template usano stili inline (non hanno accesso al CSS della pagina) e
         // font-size esplicito. Il logo è un data URL base64 → si carica in modo affidabile.
         const esc = (s) => Handlebars.escapeExpression(s || '');
+        // Header ricorrente SENZA logo (il logo, leggibile, compare una sola volta
+        // nell'intestazione in-page della prima pagina): qui solo una riga di testo.
         const headerTemplate = `
-            <div style="width:100%; font-size:8px; color:#64748b; padding:3px 10mm 0; box-sizing:border-box; -webkit-print-color-adjust:exact;">
-                <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #cbd5e1; padding-bottom:3px;">
-                    <span style="display:flex; align-items:center; gap:6px; min-width:0;">
-                        ${logoUrl ? `<img src="${logoUrl}" style="height:13px; width:auto;"/>` : ''}
-                        <span style="font-weight:600; color:#334155;">${esc(tariffario.nome)}</span>
-                    </span>
-                    <span style="white-space:nowrap;">Tariffario Medicina del Lavoro e Sicurezza</span>
+            <div style="width:100%; font-size:8px; color:#64748b; padding:4px 10mm 0; box-sizing:border-box; -webkit-print-color-adjust:exact;">
+                <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #cbd5e1; padding-bottom:4px;">
+                    <span style="font-weight:600; color:#334155; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(tariffario.nome)}</span>
+                    <span style="white-space:nowrap; padding-left:8px;">Tariffario Medicina del Lavoro e Sicurezza</span>
                 </div>
             </div>`;
         const footerTemplate = `

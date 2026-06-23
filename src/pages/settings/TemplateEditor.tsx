@@ -5,7 +5,7 @@ import { useToast } from '../../hooks/useToast';
 import { apiGet, apiPost, apiPut } from '../../services/api';
 import { ChevronLeft, Save, Download, Layout, Image, Eye, FileEdit, ChevronDown, ChevronUp, RotateCcw, Monitor, Smartphone, FileText, Presentation, Code } from 'lucide-react';
 import { Button } from '../../design-system/atoms/Button';
-import { PlaceholderDemo, GoogleTemplateProvider, GoogleDocsPreview } from '../../components/shared/template';
+import { PlaceholderDemo } from '../../components/shared/template';
 import PageHeader from '../../components/layouts/PageHeader';
 import SimpleEditor from '../../components/editor/SimpleEditor';
 import UnifiedTemplateToolbar from '../../components/editor/UnifiedTemplateToolbar';
@@ -227,7 +227,6 @@ const TemplateEditor: React.FC = () => {
           if (templateData.footer) setFooter(templateData.footer);
           if (templateData.logoImage) setLogoImage(templateData.logoImage);
           if (templateData.logoPosition) setLogoPosition(templateData.logoPosition);
-          if (templateData.googleDocsUrl) setGoogleDocsUrl(templateData.googleDocsUrl);
 
           // Check if content contains slide elements (JSON format)
           // Priority: 1) slideElements field, 2) content field with __slideEditor wrapper, 3) content as raw JSON array
@@ -697,75 +696,13 @@ const TemplateEditor: React.FC = () => {
           </div>
         </div>
 
-        {/* Google Docs integration - collapsible, auto-closes when editing HTML */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 mb-6 overflow-hidden">
-          <button
-            onClick={() => setGoogleCardExpanded(!googleCardExpanded)}
-            className="w-full p-6 flex items-center justify-between hover:bg-slate-50 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <h2 className="text-lg font-semibold text-slate-900">Integrazione Google Docs/Slides</h2>
-              {googleDocsUrl && (
-                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-                  Collegato
-                </span>
-              )}
-              {hasHtmlContent && !googleDocsUrl && (
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
-                  Usando HTML
-                </span>
-              )}
-            </div>
-            {googleCardExpanded ? (
-              <ChevronUp className="w-5 h-5 text-slate-400" />
-            ) : (
-              <ChevronDown className="w-5 h-5 text-slate-400" />
-            )}
-          </button>
-
-          {googleCardExpanded && (
-            <div className="px-6 pb-6 border-t border-slate-100">
-              <p className="text-sm text-slate-500 mb-4 mt-4">
-                {hasHtmlContent
-                  ? "⚠️ Hai già del contenuto HTML. Se colleghi un Google Doc, il contenuto HTML verrà ignorato."
-                  : "Collega un documento Google Docs/Slides per usarlo come template. Altrimenti, usa l'editor HTML qui sotto."}
-              </p>
-              <GoogleTemplateProvider
-                documentType={templateType}
-                initialTemplateUrl={googleDocsUrl}
-                onTemplateSelected={(url, id) => {
-                  setGoogleDocsUrl(url);
-                }}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Google Docs preview */}
-        {googleDocsUrl && (
-          <div className="mt-8">
-            <h2 className="text-lg font-semibold mb-4">Anteprima documento Google</h2>
-            <GoogleDocsPreview
-              documentUrl={googleDocsUrl}
-              documentType={templateType}
-              placeholderData={{
-                NOME_FORMATORE: "Mario",
-                COGNOME_FORMATORE: "Rossi",
-                CORSO_TITOLO: "Sicurezza sul Lavoro",
-                DATA_GENERAZIONE: new Date().toLocaleDateString('it-IT'),
-                NUMERO_PROGRESSIVO: "123/2025",
-                AZIENDA_RAGIONE_SOCIALE: "Acme SRL"
-              }}
-            />
-          </div>
-        )}
-
-        {/* Layout a 2 colonne: Editor + Placeholder Selector - visible only for HTML templates */}
-        {!googleDocsUrl && editorMode === 'document' && (
+        {/* Layout a 2 colonne: Editor + Placeholder Selector */}
+        {editorMode === 'document' && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* A4 Page Preview - 3/4 dello spazio */}
+            {/* A4 Page Preview — a tutta larghezza quando l'anteprima è attiva
+                (la card Segnaposti viene nascosta per dare più spazio) */}
             {/* Container con altezza fissa e proprio scroll per rendere la toolbar sticky */}
-            <div className="lg:col-span-3 flex flex-col relative" style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+            <div className={`${showLivePreview ? 'lg:col-span-4' : 'lg:col-span-3'} flex flex-col relative`} style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
               {/* Unified Toolbar for all sections - STICKY at top of this container */}
               <div className="bg-white rounded-t-2xl border border-slate-200 border-b-0 shadow-lg sticky top-0 z-50">
                 <UnifiedTemplateToolbar
@@ -1031,7 +968,8 @@ const TemplateEditor: React.FC = () => {
               </div>
             </div>
 
-            {/* Placeholder Selector - 1/4 dello spazio */}
+            {/* Placeholder Selector - 1/4 dello spazio. Nascosto quando l'anteprima è attiva. */}
+            {!showLivePreview && (
             <div className="lg:col-span-1">
               <div className="sticky top-4">
                 <PlaceholderPanel
@@ -1085,6 +1023,7 @@ const TemplateEditor: React.FC = () => {
                 </div>
               </div>
             </div>
+            )}
           </div>
         )}
 
@@ -1169,10 +1108,10 @@ const TemplateEditor: React.FC = () => {
         )}
 
         {/* HTML Raw Code Editor */}
-        {!googleDocsUrl && editorMode === 'html' && (
+        {editorMode === 'html' && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* HTML Code Editor - 3/4 dello spazio */}
-            <div className="lg:col-span-3">
+            {/* HTML Code Editor — a tutta larghezza quando l'anteprima è attiva */}
+            <div className={showLivePreview ? 'lg:col-span-4' : 'lg:col-span-3'}>
               <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                 <div className="bg-gradient-to-r from-emerald-50 to-teal-50 p-4 border-b border-slate-200">
                   <div className="flex items-center justify-between">
@@ -1297,7 +1236,8 @@ const TemplateEditor: React.FC = () => {
               </div>
             </div>
 
-            {/* Placeholder Selector per HTML - 1/4 dello spazio */}
+            {/* Placeholder Selector per HTML - 1/4 dello spazio. Nascosto in anteprima. */}
+            {!showLivePreview && (
             <div className="lg:col-span-1">
               <div className="sticky top-4">
                 <PlaceholderPanel
@@ -1473,6 +1413,7 @@ td { padding: 6px; border-bottom: 1px solid #e0e0e0; }
                 </div>
               </div>
             </div>
+            )}
           </div>
         )}
 

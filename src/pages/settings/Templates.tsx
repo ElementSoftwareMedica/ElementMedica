@@ -3,7 +3,6 @@ import { useToast } from '../../hooks/useToast';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../services/api';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
-import { GoogleIntegrationPanel } from './templates/components/google/GoogleIntegrationPanel';
 import { CRUDButton } from '../../components/shared/CRUDButton';
 import { useTenantFilter } from '../../context/TenantFilterContext';
 import { useTenantMode } from '../../contexts/TenantModeContext';
@@ -17,8 +16,6 @@ import {
   MoreVertical,
   History,
   Calendar,
-  Globe,
-  ChevronDown,
   Info,
   Sparkles,
   Wand2,
@@ -108,6 +105,13 @@ const TEMPLATE_TYPES = [
     description: 'Verbale riunione periodica Art. 35 D.Lgs 81/08 con dati sorveglianza',
     color: 'teal'
   },
+  {
+    value: 'GIUDIZIO_IDONEITA',
+    label: 'Giudizio Idoneità',
+    icon: '⚕️',
+    description: 'Giudizio di idoneità alla mansione (sorveglianza sanitaria MDL)',
+    color: 'indigo'
+  },
 ];
 
 // Helper per ottenere i placeholder disponibili per tipo
@@ -170,6 +174,15 @@ const getPlaceholdersForType = (type: string): string[] => {
       'partecipanti.rspp', 'partecipanti.rls',
       'rischi', 'protocolliSanitari', 'delibere'
     ],
+    'GIUDIZIO_IDONEITA': [
+      'lavoratore.nome', 'lavoratore.cognome', 'lavoratore.codiceFiscale',
+      'lavoratore.dataNascita', 'lavoratore.mansione',
+      'azienda.ragioneSociale', 'azienda.partitaIva',
+      'visita.data', 'visita.tipo',
+      'medico.nome', 'medico.cognome',
+      'giudizio.esito', 'giudizio.prescrizioni', 'giudizio.limitazioni',
+      'giudizio.scadenza'
+    ],
     'CUSTOM': []
   };
   return placeholders[type] || [];
@@ -201,7 +214,6 @@ const TemplatesSettingsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [showOnlyDefaults, setShowOnlyDefaults] = useState(false);
-  const [showGooglePanel, setShowGooglePanel] = useState(false);
 
   // Create template modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -268,7 +280,6 @@ const TemplatesSettingsPage: React.FC = () => {
     preventivo: templates.filter(t => t.type === 'PREVENTIVO').length,
     invoice: templates.filter(t => t.type === 'INVOICE').length,
     visitaMedica: templates.filter(t => t.type === 'VISITA_MEDICA').length,
-    slides: templates.filter(t => t.type === 'SLIDES' || t.googleSlidesId).length,
     custom: templates.filter(t => t.type === 'CUSTOM').length
   };
 
@@ -379,15 +390,7 @@ const TemplatesSettingsPage: React.FC = () => {
     navigate(`${basePath}/${template.id}/versions`);
   };
 
-  const handleGoogleImport = (templateData: any) => {
-    showToast({ message: `Template "${templateData.name}" importato da Google`, type: 'success' });
-    fetchTemplates();
-  };
-
-  const getTemplateIcon = (template: Template) => {
-    if (template.googleSlidesId || template.type === 'slides') {
-      return <FileText className="w-5 h-5 text-blue-600" />;
-    }
+  const getTemplateIcon = (_template: Template) => {
     return <FileText className="w-5 h-5 text-gray-600" />;
   };
 
@@ -476,11 +479,13 @@ const TemplatesSettingsPage: React.FC = () => {
               <div className="text-sm text-gray-500">Totale: {stats.total}</div>
             </div>
 
-            <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
+            {/* Panoramica: tutte le tipologie su un'unica riga */}
+            <div
+              className="grid gap-2"
+              style={{ gridTemplateColumns: `repeat(${TEMPLATE_TYPES.length}, minmax(0, 1fr))` }}
+            >
               {TEMPLATE_TYPES.map((type) => {
-                const count = templates.filter(t =>
-                  t.type === type.value || (type.value === 'SLIDES' && t.googleSlidesId)
-                ).length;
+                const count = templates.filter(t => t.type === type.value).length;
 
                 const colorClasses = {
                   blue: 'bg-blue-50 border-blue-200 text-blue-700',
@@ -523,7 +528,11 @@ const TemplatesSettingsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Predefiniti: massimo 3 righe → colonne = ceil(N / 3) */}
+            <div
+              className="grid gap-4"
+              style={{ gridTemplateColumns: `repeat(${Math.ceil(TEMPLATE_TYPES.length / 3)}, minmax(0, 1fr))` }}
+            >
               {TEMPLATE_TYPES.map((type) => {
                 const defaultTemplate = templates.find(t => t.type === type.value && t.isDefault);
                 const typeTemplates = templates.filter(t => t.type === type.value);
@@ -709,29 +718,6 @@ const TemplatesSettingsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Google Integration Section - Compact & Collapsible */}
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
-            <button
-              onClick={() => setShowGooglePanel(!showGooglePanel)}
-              className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
-            >
-              <div className="flex items-center">
-                <Globe className="w-5 h-5 mr-2 text-blue-600" />
-                <h3 className="text-lg font-semibold text-gray-900">Importa da Google</h3>
-              </div>
-              <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${showGooglePanel ? 'transform rotate-180' : ''}`} />
-            </button>
-
-            {showGooglePanel && (
-              <div className="p-4 border-t border-gray-200">
-                <p className="text-sm text-gray-600 mb-4">
-                  Importa documenti da Google Docs o presentazioni da Google Slides
-                </p>
-                <GoogleIntegrationPanel onTemplateImported={handleGoogleImport} />
-              </div>
-            )}
-          </div>
-
           {/* Templates List Section */}
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
             <div className="p-6 border-b border-gray-200">
@@ -790,18 +776,6 @@ const TemplatesSettingsPage: React.FC = () => {
                               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                                 <Star className="w-3 h-3 mr-1" />
                                 Predefinito
-                              </span>
-                            )}
-                            {template.googleSlidesId && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                <Globe className="w-3 h-3 mr-1" />
-                                Google Slides
-                              </span>
-                            )}
-                            {template.googleDocsUrl && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                <Globe className="w-3 h-3 mr-1" />
-                                Google Docs
                               </span>
                             )}
                             {template.markers && Array.isArray(template.markers) && (template.markers as any[]).length > 0 && (
