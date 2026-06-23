@@ -38,6 +38,7 @@ import {
 import { cn } from '../../design-system/utils';
 import { useToast } from '../../hooks/useToast';
 import { apiGet, apiDownload, apiPost, apiUpload, apiDelete } from '../../services/api';
+import { ActionButton } from '../ui/ActionButton';
 import SigningWorkflowModal from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
 import type { SignaturePlacement } from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
 import { DatePickerElegante } from '../ui/DatePickerElegante';
@@ -205,17 +206,21 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
         setQueriedTo(dateTo);
     };
 
+    // Periodo effettivo: quello generato nel modal, oppure i default della card
+    const effFrom = queriedFrom || dateFrom;
+    const effTo = queriedTo || dateTo;
+
     const handleGeneraDocx = async () => {
-        if (!stats || !queriedFrom || !queriedTo) return;
+        if (!effFrom || !effTo) return;
         setIsGeneratingPdf(true);
         try {
             const blob = await apiDownload(
-                `/api/v1/companies/${companyTenantProfileId}/risultati-anonimi/pdf?dateFrom=${queriedFrom}&dateTo=${queriedTo}`
+                `/api/v1/companies/${companyTenantProfileId}/risultati-anonimi/pdf?dateFrom=${effFrom}&dateTo=${effTo}`
             );
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `risultati-anonimi-${companyName.replace(/\s+/g, '-')}-${queriedFrom}-${queriedTo}.docx`;
+            a.download = `risultati-anonimi-${companyName.replace(/\s+/g, '-')}-${effFrom}-${effTo}.docx`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
@@ -257,16 +262,16 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
 
     // Scarica il PDF elegante (con grafici) — formato alternativo al DOCX
     const handleGeneraPdf = async () => {
-        if (!stats || !queriedFrom || !queriedTo) return;
+        if (!effFrom || !effTo) return;
         setIsGeneratingPdf(true);
         try {
             const blob = await apiDownload(
-                `/api/v1/companies/${companyTenantProfileId}/risultati-anonimi/pdf?dateFrom=${queriedFrom}&dateTo=${queriedTo}&format=pdf`
+                `/api/v1/companies/${companyTenantProfileId}/risultati-anonimi/pdf?dateFrom=${effFrom}&dateTo=${effTo}&format=pdf`
             );
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `risultati-anonimi-${companyName.replace(/\s+/g, '-')}-${queriedFrom}-${queriedTo}.pdf`;
+            a.download = `risultati-anonimi-${companyName.replace(/\s+/g, '-')}-${effFrom}-${effTo}.pdf`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
@@ -277,6 +282,19 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
             showToast({ type: 'error', message: 'Errore nella generazione del PDF' });
         } finally {
             setIsGeneratingPdf(false);
+        }
+    };
+
+    // Quick-look del PDF: apre l'anteprima del PDF in una nuova scheda
+    const handleQuicklookPdf = async () => {
+        if (!effFrom || !effTo) return;
+        try {
+            const blob = await apiDownload(
+                `/api/v1/companies/${companyTenantProfileId}/risultati-anonimi/pdf?dateFrom=${effFrom}&dateTo=${effTo}&format=pdf`
+            );
+            window.open(URL.createObjectURL(blob), '_blank', 'noopener,noreferrer');
+        } catch {
+            showToast({ type: 'error', message: 'Errore nell\'apertura dell\'anteprima' });
         }
     };
 
@@ -831,13 +849,24 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
                                     Art. 40 c.1 D.Lgs 81/08 — Statistiche aggregate anonime per periodo
                                 </p>
                             </div>
-                            <button
-                                onClick={() => setIsModalOpen(true)}
-                                className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors flex-shrink-0"
-                            >
-                                <BarChart3 className="h-4 w-4" />
-                                Genera
-                            </button>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                                <ActionButton
+                                    theme="teal"
+                                    actions={[
+                                        { label: 'Scarica PDF', icon: <Download className="h-4 w-4" />, onClick: () => void handleGeneraPdf() },
+                                        { label: 'Scarica DOCX', icon: <FileType2 className="h-4 w-4" />, onClick: () => void handleGeneraDocx() },
+                                        { label: 'Anteprima PDF (quick-look)', icon: <Eye className="h-4 w-4" />, onClick: () => void handleQuicklookPdf() },
+                                        { label: 'Apri dettaglio', icon: <BarChart3 className="h-4 w-4" />, onClick: () => setIsModalOpen(true) },
+                                    ]}
+                                />
+                                <button
+                                    onClick={() => setIsModalOpen(true)}
+                                    className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors"
+                                >
+                                    <BarChart3 className="h-4 w-4" />
+                                    Genera
+                                </button>
+                            </div>
                         </div>
                         <div className="mt-4 rounded-xl border border-gray-100 dark:border-gray-700">
                             <button

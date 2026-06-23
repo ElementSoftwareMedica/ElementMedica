@@ -34,6 +34,7 @@ import {
 import { cn } from '../../design-system/utils';
 import { useToast } from '../../hooks/useToast';
 import { apiGet, apiDownload, apiPost, apiUpload, apiDelete } from '../../services/api';
+import { ActionButton } from '../ui/ActionButton';
 import SigningWorkflowModal from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
 import type { SignaturePlacement } from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
 
@@ -231,16 +232,19 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
         setQueriedYear(selectedYear);
     };
 
+    // Anno effettivo: quello generato nel modal, oppure quello selezionato nella card
+    const effYear = queriedYear || selectedYear;
+
     const handleDownloadDocx = async () => {
         setIsDownloading(true);
         try {
             const blob = await apiDownload(
-                `/api/v1/companies/${companyTenantProfileId}/riunione-periodica/pdf?anno=${queriedYear}&delibereConclusioni=${encodeURIComponent(delibereConclusioni)}`
+                `/api/v1/companies/${companyTenantProfileId}/riunione-periodica/pdf?anno=${effYear}&delibereConclusioni=${encodeURIComponent(delibereConclusioni)}`
             );
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `verbale-riunione-periodica-${queriedYear}-${companyName.replace(/\s+/g, '-')}.docx`;
+            a.download = `verbale-riunione-periodica-${effYear}-${companyName.replace(/\s+/g, '-')}.docx`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -260,12 +264,12 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
         setIsDownloading(true);
         try {
             const blob = await apiDownload(
-                `/api/v1/companies/${companyTenantProfileId}/riunione-periodica/pdf?anno=${queriedYear}&delibereConclusioni=${encodeURIComponent(delibereConclusioni)}&format=pdf`
+                `/api/v1/companies/${companyTenantProfileId}/riunione-periodica/pdf?anno=${effYear}&delibereConclusioni=${encodeURIComponent(delibereConclusioni)}&format=pdf`
             );
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `verbale-riunione-periodica-${queriedYear}-${companyName.replace(/\s+/g, '-')}.pdf`;
+            a.download = `verbale-riunione-periodica-${effYear}-${companyName.replace(/\s+/g, '-')}.pdf`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -276,6 +280,18 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
             showToast({ type: 'error', message: 'Errore nel download del PDF' });
         } finally {
             setIsDownloading(false);
+        }
+    };
+
+    // Quick-look del PDF: apre l'anteprima del PDF in una nuova scheda
+    const handleQuicklookPdf = async () => {
+        try {
+            const blob = await apiDownload(
+                `/api/v1/companies/${companyTenantProfileId}/riunione-periodica/pdf?anno=${effYear}&delibereConclusioni=${encodeURIComponent(delibereConclusioni)}&format=pdf`
+            );
+            window.open(URL.createObjectURL(blob), '_blank', 'noopener,noreferrer');
+        } catch {
+            showToast({ type: 'error', message: 'Errore nell\'apertura dell\'anteprima' });
         }
     };
 
@@ -801,13 +817,24 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
                                     Art. 35 D.Lgs 81/08 — Dati aggregati sorveglianza sanitaria
                                 </p>
                             </div>
-                            <button
-                                onClick={() => setIsModalOpen(true)}
-                                className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors flex-shrink-0"
-                            >
-                                <FileText className="h-4 w-4" />
-                                Genera Verbale
-                            </button>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                                <ActionButton
+                                    theme="teal"
+                                    actions={[
+                                        { label: 'Scarica PDF', icon: <Download className="h-4 w-4" />, onClick: () => void handleDownloadPdf() },
+                                        { label: 'Scarica DOCX', icon: <FileType2 className="h-4 w-4" />, onClick: () => void handleDownloadDocx() },
+                                        { label: 'Anteprima PDF (quick-look)', icon: <Eye className="h-4 w-4" />, onClick: () => void handleQuicklookPdf() },
+                                        { label: 'Apri dettaglio', icon: <FileText className="h-4 w-4" />, onClick: () => setIsModalOpen(true) },
+                                    ]}
+                                />
+                                <button
+                                    onClick={() => setIsModalOpen(true)}
+                                    className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors"
+                                >
+                                    <FileText className="h-4 w-4" />
+                                    Genera Verbale
+                                </button>
+                            </div>
                         </div>
                         <div className="mt-4 rounded-xl border border-gray-100 dark:border-gray-700">
                             <button
