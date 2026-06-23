@@ -238,16 +238,16 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `verbale-riunione-periodica-${queriedYear}-${companyName.replace(/\s+/g, '-')}.pdf`;
+            a.download = `verbale-riunione-periodica-${queriedYear}-${companyName.replace(/\s+/g, '-')}.docx`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             setIsPdfGenerated(true);
             await refetchDocumenti();
-            showToast({ type: 'success', message: 'PDF scaricato con successo' });
+            showToast({ type: 'success', message: 'Documento Word scaricato con successo' });
         } catch {
-            showToast({ type: 'error', message: 'Errore nel download del PDF' });
+            showToast({ type: 'error', message: 'Errore nel download del documento' });
         } finally {
             setIsDownloading(false);
         }
@@ -296,7 +296,7 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
     };
 
     const getPreviewPdfUrl = () => (
-        `/api/v1/companies/${companyTenantProfileId}/riunione-periodica/pdf?anno=${queriedYear || selectedYear}&delibereConclusioni=${encodeURIComponent(delibereConclusioni)}`
+        `/api/v1/companies/${companyTenantProfileId}/riunione-periodica/pdf?anno=${queriedYear || selectedYear}&delibereConclusioni=${encodeURIComponent(delibereConclusioni)}&format=pdf`
     );
 
     const handleOnlineSign = async ({
@@ -452,7 +452,7 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
                                         ? <Loader2 className="h-4 w-4 animate-spin" />
                                         : <Download className="h-4 w-4" />
                                     }
-                                    Scarica PDF
+                                    Scarica DOCX
                                 </button>
                             </div>
 

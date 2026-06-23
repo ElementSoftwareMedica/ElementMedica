@@ -10,6 +10,7 @@
 import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 import pdfService from '../pdfService.js';
+import { htmlToDocxBuffer } from '../../utils/htmlToDocx.js';
 import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -357,7 +358,7 @@ const RisultatiAnonimiService = {
     /**
      * Genera il PDF dei Risultati Anonimi Collettivi.
      */
-    async generatePdf(companyTenantProfileId, dateFrom, dateTo, tenantId) {
+    async buildHtml(companyTenantProfileId, dateFrom, dateTo, tenantId) {
         const data = await this.getStatsByCompany(companyTenantProfileId, dateFrom, dateTo, tenantId);
 
         // Company data
@@ -385,17 +386,26 @@ const RisultatiAnonimiService = {
 
         const today = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-        const html = buildRisultatiAnonimiHtml(data, {
+        return buildRisultatiAnonimiHtml(data, {
             tenantName, logoUrl, tenantAddress, tenantPhone, tenantEmail, tenantPiva, tenantPec,
             ragioneSociale, today
         });
+    },
 
-        const pdfBuffer = await pdfService.generatePDF(html, {
+    async generatePdf(companyTenantProfileId, dateFrom, dateTo, tenantId) {
+        const html = await this.buildHtml(companyTenantProfileId, dateFrom, dateTo, tenantId);
+        return pdfService.generatePDF(html, {
             format: 'A4',
             margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' },
         });
+    },
 
-        return pdfBuffer;
+    /**
+     * Genera il DOCX dei risultati collettivi anonimi (documento di testo).
+     */
+    async generateDocx(companyTenantProfileId, dateFrom, dateTo, tenantId) {
+        const html = await this.buildHtml(companyTenantProfileId, dateFrom, dateTo, tenantId);
+        return htmlToDocxBuffer(html, 'Risultati Collettivi Anonimi');
     }
 };
 

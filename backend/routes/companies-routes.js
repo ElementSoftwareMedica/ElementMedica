@@ -2952,18 +2952,18 @@ router.get('/:companyTenantProfileId/risultati-anonimi/pdf',
         return res.status(400).json({ error: 'Formato date non valido (YYYY-MM-DD)' });
       }
 
-      const pdfBuffer = await RisultatiAnonimiService.generatePdf(
-        companyTenantProfileId,
-        String(dateFrom),
-        String(dateTo),
-        tenantId
-      );
-      const originalName = `risultati-anonimi-${String(dateFrom)}-${String(dateTo)}.pdf`;
+      // Documento di testo (DOCX) di default, PDF solo se richiesto esplicitamente
+      const wantsPdf = String(req.query.format || 'docx').toLowerCase() === 'pdf';
+      const ext = wantsPdf ? 'pdf' : 'docx';
+      const buffer = wantsPdf
+        ? await RisultatiAnonimiService.generatePdf(companyTenantProfileId, String(dateFrom), String(dateTo), tenantId)
+        : await RisultatiAnonimiService.generateDocx(companyTenantProfileId, String(dateFrom), String(dateTo), tenantId);
+      const originalName = `risultati-anonimi-${String(dateFrom)}-${String(dateTo)}.${ext}`;
       archiveMdlDocumentBuffer({
         tenantId,
         profileId: companyTenantProfileId,
         documentType: 'risultati-anonimi',
-        buffer: pdfBuffer,
+        buffer,
         originalName,
         note: `Risultati anonimi collettivi ${String(dateFrom)} - ${String(dateTo)}`,
         generatedBy: req.person?.id || null,
@@ -2987,12 +2987,14 @@ router.get('/:companyTenantProfileId/risultati-anonimi/pdf',
         }
       }).catch(err => logger.warn('GdprAuditLog risultati anonimi non salvato', { error: err.message }));
 
-      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Type', wantsPdf
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       res.setHeader('Content-Disposition', `attachment; filename=${originalName}`);
-      res.send(pdfBuffer);
+      res.send(buffer);
     } catch (error) {
-      logger.error({ error: 'Operazione non riuscita' }, 'Errore generazione PDF risultati anonimi');
-      res.status(500).json({ error: 'Errore nella generazione del PDF' });
+      logger.error({ error: 'Operazione non riuscita' }, 'Errore generazione documento risultati anonimi');
+      res.status(500).json({ error: 'Errore nella generazione del documento' });
     }
   }
 );
@@ -3051,18 +3053,19 @@ router.get('/:companyTenantProfileId/riunione-periodica/pdf',
         return res.status(400).json({ error: 'Anno non valido' });
       }
 
-      const pdfBuffer = await RiunioniPeriodicheService.generatePdf(
-        companyTenantProfileId,
-        annoNum,
-        tenantId,
-        { delibereConclusioni: String(req.query.delibereConclusioni || '').slice(0, 5000) }
-      );
-      const originalName = `verbale-riunione-periodica-${annoNum}.pdf`;
+      // Documento di testo (DOCX) di default, PDF solo se richiesto esplicitamente
+      const wantsPdf = String(req.query.format || 'docx').toLowerCase() === 'pdf';
+      const ext = wantsPdf ? 'pdf' : 'docx';
+      const opts = { delibereConclusioni: String(req.query.delibereConclusioni || '').slice(0, 5000) };
+      const buffer = wantsPdf
+        ? await RiunioniPeriodicheService.generatePdf(companyTenantProfileId, annoNum, tenantId, opts)
+        : await RiunioniPeriodicheService.generateDocx(companyTenantProfileId, annoNum, tenantId, opts);
+      const originalName = `verbale-riunione-periodica-${annoNum}.${ext}`;
       archiveMdlDocumentBuffer({
         tenantId,
         profileId: companyTenantProfileId,
         documentType: 'riunione-periodica',
-        buffer: pdfBuffer,
+        buffer,
         originalName,
         note: `Verbale riunione periodica ${annoNum}`,
         generatedBy: req.person?.id || null,
@@ -3088,12 +3091,14 @@ router.get('/:companyTenantProfileId/riunione-periodica/pdf',
         }
       }).catch(err => logger.warn('GdprAuditLog riunione periodica non salvato', { error: err.message }));
 
-      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Type', wantsPdf
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       res.setHeader('Content-Disposition', `attachment; filename=${originalName}`);
-      res.send(pdfBuffer);
+      res.send(buffer);
     } catch (error) {
-      logger.error({ error: 'Operazione non riuscita' }, 'Errore generazione PDF verbale riunione periodica');
-      res.status(500).json({ error: 'Errore nella generazione del PDF del verbale' });
+      logger.error({ error: 'Operazione non riuscita' }, 'Errore generazione documento verbale riunione periodica');
+      res.status(500).json({ error: 'Errore nella generazione del verbale' });
     }
   }
 );

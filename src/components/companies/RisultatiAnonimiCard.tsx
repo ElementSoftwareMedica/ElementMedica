@@ -213,16 +213,16 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `risultati-anonimi-${companyName.replace(/\s+/g, '-')}-${queriedFrom}-${queriedTo}.pdf`;
+            a.download = `risultati-anonimi-${companyName.replace(/\s+/g, '-')}-${queriedFrom}-${queriedTo}.docx`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
             setIsPdfGenerated(true);
             await refetchDocumenti();
-            showToast({ type: 'success', message: 'PDF generato con successo' });
+            showToast({ type: 'success', message: 'Documento Word generato con successo' });
         } catch {
-            showToast({ type: 'error', message: 'Errore nella generazione del PDF' });
+            showToast({ type: 'error', message: 'Errore nella generazione del documento' });
         } finally {
             setIsGeneratingPdf(false);
         }
@@ -271,7 +271,7 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
     };
 
     const getPreviewPdfUrl = () => (
-        `/api/v1/companies/${companyTenantProfileId}/risultati-anonimi/pdf?dateFrom=${queriedFrom || dateFrom}&dateTo=${queriedTo || dateTo}`
+        `/api/v1/companies/${companyTenantProfileId}/risultati-anonimi/pdf?dateFrom=${queriedFrom || dateFrom}&dateTo=${queriedTo || dateTo}&format=pdf`
     );
 
     const handleOnlineSign = async ({
@@ -448,7 +448,7 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
                                         ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                         : <Download className="h-3.5 w-3.5" />
                                     }
-                                    Esporta PDF
+                                    Esporta DOCX
                                 </button>
                             </div>
 

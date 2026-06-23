@@ -17,6 +17,7 @@
 import prisma from '../../config/prisma-optimization.js';
 import logger from '../../utils/logger.js';
 import pdfService from '../pdfService.js';
+import { htmlToDocxBuffer } from '../../utils/htmlToDocx.js';
 import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -458,9 +459,9 @@ const RiunioniPeriodicheService = {
     },
 
     /**
-     * Genera il PDF del verbale della riunione periodica.
+     * Costruisce l'HTML del verbale (condiviso da PDF e DOCX).
      */
-    async generatePdf(companyTenantProfileId, annoRiferimento, tenantId, options = {}) {
+    async buildHtml(companyTenantProfileId, annoRiferimento, tenantId, options = {}) {
         const data = await this.getAggregateData(companyTenantProfileId, annoRiferimento, tenantId);
 
         // Load tenant info for header
@@ -489,17 +490,29 @@ const RiunioniPeriodicheService = {
 
         const today = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-        const html = buildVerbaleHtml(data, {
+        return buildVerbaleHtml(data, {
             tenantName, logoUrl, tenantAddress, tenantPhone, tenantEmail, tenantPiva, tenantPec,
             mcName, today, delibereConclusioni: options.delibereConclusioni || ''
         });
+    },
 
-        const pdfBuffer = await pdfService.generatePDF(html, {
+    /**
+     * Genera il PDF del verbale della riunione periodica.
+     */
+    async generatePdf(companyTenantProfileId, annoRiferimento, tenantId, options = {}) {
+        const html = await this.buildHtml(companyTenantProfileId, annoRiferimento, tenantId, options);
+        return pdfService.generatePDF(html, {
             format: 'A4',
             margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' },
         });
+    },
 
-        return pdfBuffer;
+    /**
+     * Genera il DOCX del verbale (documento di testo modificabile/integrabile).
+     */
+    async generateDocx(companyTenantProfileId, annoRiferimento, tenantId, options = {}) {
+        const html = await this.buildHtml(companyTenantProfileId, annoRiferimento, tenantId, options);
+        return htmlToDocxBuffer(html, 'Verbale Riunione Periodica');
     }
 };
 
