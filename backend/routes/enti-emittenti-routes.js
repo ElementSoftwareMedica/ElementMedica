@@ -16,7 +16,6 @@ import { checkPermission } from '../middleware/permissions.js';
 import prisma from '../config/prisma-optimization.js';
 import {
   testConnessioneAcube,
-  getMasterAcubeToken,
   elencaSpeseRicevute,
   elencaFatture,
   getDettaglioSpesa,
@@ -309,9 +308,10 @@ router.put('/:id',
       if (pec !== undefined) updateData.pec = pec;
       if (iban !== undefined) updateData.iban = iban;
       // Non aggiornare credenziali AcubeAPI (SaaS model: gestite da ElementMedica)
-      if (sistemaTsPinCode !== undefined) updateData.sistemaTsPinCode = sistemaTsPinCode;
-      if (sistemaTsUsername !== undefined) updateData.sistemaTsUsername = sistemaTsUsername;
-      if (sistemaTsPassword !== undefined) updateData.sistemaTsPassword = sistemaTsPassword;
+      // Stringa vuota = "non toccare il valore esistente"
+      if (sistemaTsPinCode !== undefined && sistemaTsPinCode !== '') updateData.sistemaTsPinCode = sistemaTsPinCode;
+      if (sistemaTsUsername !== undefined && sistemaTsUsername !== '') updateData.sistemaTsUsername = sistemaTsUsername;
+      if (sistemaTsPassword !== undefined && sistemaTsPassword !== '') updateData.sistemaTsPassword = sistemaTsPassword;
       if (sistemaTsAbilitato !== undefined) updateData.sistemaTsAbilitato = sistemaTsAbilitato;
       if (isDefault !== undefined) updateData.isDefault = isDefault;
       if (isActive !== undefined) updateData.isActive = isActive;
@@ -336,6 +336,9 @@ router.put('/:id',
       });
     } catch (error) {
       logger.error('Errore PUT ente-emittente/:id', { error: error.message });
+      if (error.code === 'P2000' || error.message?.includes('too long for the column')) {
+        return res.status(400).json({ error: 'Un campo supera la lunghezza massima consentita' });
+      }
       return res.status(500).json({ error: 'Errore interno del server' });
     }
   }
@@ -450,8 +453,8 @@ router.post('/test-acube-master',
 // ---------------------------------------------------------------------------
 // POST /api/v1/billing/enti-emittenti/:id/test-acube
 // Verifica connessione AcubeAPI per l'ente.
-// Se nel body sono presenti { email, password }, usa quelle credenziali;
-// altrimenti usa le credenziali master ElementMedica (SaaS model).
+// SaaS model: AcubeAPI è gestita centralmente da ElementMedica → SEMPRE master.
+// Le credenziali NON sono accettate dal body (evita oracolo di credential-testing).
 // ---------------------------------------------------------------------------
 router.post('/:id/test-acube',
   authenticate,
@@ -471,12 +474,8 @@ router.post('/:id/test-acube',
         return res.status(404).json({ error: 'Ente emittente non trovato' });
       }
 
-      // Usa credenziali personalizzate se fornite, altrimenti master
-      const { email, password } = req.body || {};
-      const result = await testConnessioneAcube(
-        email || null,
-        password || null
-      );
+      // SaaS model: usa SEMPRE le credenziali master (mai dal body)
+      const result = await testConnessioneAcube(null, null);
 
       return res.json({
         ok: result.ok,
@@ -531,17 +530,14 @@ router.post('/:id/test-sistema-ts',
         });
       }
 
-      // Usa master token ACube per autenticare le chiamate SistemaTS
-      const { getMasterAcubeToken: getToken } = await import('../services/billing/AcubeApiService.js');
-      const masterToken = await getToken();
-
       const credentials = {
         pinCode: ente.sistemaTsPinCode,
         username: ente.sistemaTsUsername,
         password: ente.sistemaTsPassword
       };
 
-      const result = await testConnessioneSistemaTS(masterToken, credentials);
+      // testConnessioneSistemaTS gestisce internamente il master token e i suoi errori
+      const result = await testConnessioneSistemaTS(null, credentials);
 
       return res.json({
         ok: result.ok,

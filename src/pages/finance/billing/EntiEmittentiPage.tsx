@@ -538,6 +538,7 @@ const EntiEmittentiPage: React.FC = () => {
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">P.IVA</label>
                                         <input
                                             value={form.piva}
+                                            maxLength={11}
                                             onChange={e => setForm(f => ({ ...f, piva: e.target.value }))}
                                             className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal-500"
                                         />
@@ -657,17 +658,25 @@ const EntiEmittentiPage: React.FC = () => {
                                 {form.sistemaTsAbilitato && (
                                     <div className="grid grid-cols-3 gap-4 p-3 bg-violet-50 dark:bg-violet-900/20 rounded-lg border border-violet-200 dark:border-violet-800">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">PIN Code</label>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                                                PIN Code {editingEnte?.sistemaTsConfigurato && <span className="text-xs font-normal text-gray-400">(vuoto = invariato)</span>}
+                                            </label>
                                             <input
                                                 value={form.sistemaTsPinCode}
+                                                maxLength={20}
+                                                placeholder={editingEnte?.sistemaTsConfigurato ? '••••••••••' : ''}
                                                 onChange={e => setForm(f => ({ ...f, sistemaTsPinCode: e.target.value }))}
                                                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Username (CF)</label>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                                                Username (CF) {editingEnte?.sistemaTsConfigurato && <span className="text-xs font-normal text-gray-400">(vuoto = invariato)</span>}
+                                            </label>
                                             <input
                                                 value={form.sistemaTsUsername}
+                                                maxLength={20}
+                                                placeholder={editingEnte?.sistemaTsConfigurato ? '••••••••••••••••' : ''}
                                                 onChange={e => setForm(f => ({ ...f, sistemaTsUsername: e.target.value.toUpperCase() }))}
                                                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
                                             />
