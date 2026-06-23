@@ -23,7 +23,9 @@ import {
   ChevronDown,
   ChevronUp,
   Printer,
-  Search
+  Search,
+  Stethoscope,
+  Briefcase
 } from 'lucide-react';
 // P59 Sprint 11.2: DnD Kit for drag & drop
 import {
@@ -342,6 +344,25 @@ const QuestionarioCombobox: React.FC<QuestionarioComboboxProps> = ({ questionari
     </div>
   );
 };
+
+// Categorizzazione delle voci nelle 3 sezioni (specchia il PDF e la pagina di dettaglio)
+type SezioneVoce = 'MDL' | 'CONSULENZA' | 'SPESE';
+const CONSULENZA_VOCE_TYPES = [
+  'CONSULENZA', 'SOPRALLUOGO_MC', 'SOPRALLUOGO_RSPP', 'NOMINA_MC', 'NOMINA_RSPP',
+  'DVR_NUOVO', 'DVR_AGGIORNAMENTO_CON_MODIFICHE', 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE',
+];
+const SPESE_VOCE_TYPES = ['SPESA_FISSA', 'SPESA_RICORRENTE', 'USCITA_MC'];
+const categoriaVoce = (tipo: string): SezioneVoce => {
+  if (tipo === 'PRESTAZIONE' || tipo === 'QUESTIONARIO') return 'MDL';
+  if (CONSULENZA_VOCE_TYPES.includes(tipo)) return 'CONSULENZA';
+  if (SPESE_VOCE_TYPES.includes(tipo)) return 'SPESE';
+  return 'SPESE';
+};
+const SEZIONI_VOCI: { key: SezioneVoce; label: string; icon: React.ElementType; color: string }[] = [
+  { key: 'MDL', label: 'Prestazioni Medicina del Lavoro', icon: Stethoscope, color: 'text-teal-700 dark:text-teal-400' },
+  { key: 'CONSULENZA', label: 'Consulenza e Sicurezza', icon: Briefcase, color: 'text-purple-700 dark:text-purple-400' },
+  { key: 'SPESE', label: 'Spese Accessorie', icon: Euro, color: 'text-gray-600 dark:text-gray-400' },
+];
 
 const TariffarioAziendaleForm: React.FC = () => {
   const navigate = useNavigate();
@@ -812,6 +833,98 @@ const TariffarioAziendaleForm: React.FC = () => {
     } finally {
       setPrinting(false);
     }
+  };
+
+  // Render di una singola voce (gestisce i gruppi DVR / Visita MDL con pattern leader+hidden)
+  const renderVoceCard = (voce: VoceTariffario) => {
+    const isVisitaMDLVoce =
+      voce.tipo === 'PRESTAZIONE' &&
+      !!voce.categoriaVisita &&
+      voce.prestazione?.tipo === 'VISITA_MEDICINA_LAVORO';
+
+    // DVR group: tutte le tipologie DVR_* renderizzate come un unico gruppo
+    const isDVRVoce = voce.tipo === 'DVR_NUOVO' ||
+      voce.tipo === 'DVR_AGGIORNAMENTO_CON_MODIFICHE' ||
+      voce.tipo === 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE';
+
+    if (isDVRVoce) {
+      const isLeader = dvrGroupVoci.length > 0 && dvrGroupVoci[0].id === voce.id;
+      if (!isLeader) {
+        return <HiddenSortableItem key={voce.id} id={voce.id} disabled={reordering} />;
+      }
+      return (
+        <SortableDVRGroupCard
+          key={voce.id}
+          voce={voce}
+          groupVoci={dvrGroupVoci}
+          tariffarioId={id!}
+          expanded={expandedVoci.has(voce.id)}
+          onToggle={() => toggleVoceExpanded(voce.id)}
+          onDeleteGroup={() => handleDeleteDVRGroup(dvrGroupVoci)}
+          onUpdateGroup={(updatedVoci, deletedIds) => {
+            setVoci(prev => {
+              const withoutDeleted = prev.filter(v => !deletedIds.includes(v.id));
+              const withUpdated = withoutDeleted.map(v => {
+                const u = updatedVoci.find(x => x.id === v.id);
+                return u || v;
+              });
+              const newOnes = updatedVoci.filter(u => !withoutDeleted.some(v => v.id === u.id));
+              return [...withUpdated, ...newOnes];
+            });
+          }}
+          disabled={reordering}
+        />
+      );
+    }
+
+    if (isVisitaMDLVoce && voce.prestazioneId) {
+      const group = visitaMDLGroups.get(voce.prestazioneId) || [voce];
+      const isLeader = group[0].id === voce.id;
+
+      if (!isLeader) {
+        // Voce secondaria: invisibile ma mantenuta nel DnD
+        return <HiddenSortableItem key={voce.id} id={voce.id} disabled={reordering} />;
+      }
+
+      return (
+        <SortableVisitaMDLGroupCard
+          key={voce.id}
+          voce={voce}
+          groupVoci={group}
+          tariffarioId={id!}
+          expanded={expandedVoci.has(voce.id)}
+          onToggle={() => toggleVoceExpanded(voce.id)}
+          onDeleteGroup={() => handleDeleteVisitaMDLGroup(group)}
+          onUpdateGroup={(updatedVoci, deletedIds) => {
+            setVoci(prev => {
+              const withoutDeleted = prev.filter(v => !deletedIds.includes(v.id));
+              const withUpdated = withoutDeleted.map(v => {
+                const u = updatedVoci.find(x => x.id === v.id);
+                return u || v;
+              });
+              const newOnes = updatedVoci.filter(u => !withoutDeleted.some(v => v.id === u.id));
+              return [...withUpdated, ...newOnes];
+            });
+          }}
+          disabled={reordering}
+        />
+      );
+    }
+
+    return (
+      <SortableVoceCard
+        key={voce.id}
+        voce={voce}
+        tariffarioId={id!}
+        expanded={expandedVoci.has(voce.id)}
+        onToggle={() => toggleVoceExpanded(voce.id)}
+        onDelete={() => handleDeleteVoce(voce.id, getVoceDisplayName(voce))}
+        onUpdate={(updatedVoce) => {
+          setVoci(prev => prev.map(v => v.id === updatedVoce.id ? updatedVoce : v));
+        }}
+        disabled={reordering}
+      />
+    );
   };
 
   if (loading) {
@@ -1615,103 +1728,32 @@ const TariffarioAziendaleForm: React.FC = () => {
                     collisionDetection={closestCenter}
                     onDragEnd={handleDragEnd}
                   >
-                    <SortableContext
-                      items={voci.map(v => v.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <div className="space-y-2">
-                        {voci.map((voce) => {
-                          const isVisitaMDLVoce =
-                            voce.tipo === 'PRESTAZIONE' &&
-                            !!voce.categoriaVisita &&
-                            voce.prestazione?.tipo === 'VISITA_MEDICINA_LAVORO';
-
-                          // DVR group: tutte le tipologie DVR_* renderizzate come un unico gruppo
-                          const isDVRVoce = voce.tipo === 'DVR_NUOVO' ||
-                            voce.tipo === 'DVR_AGGIORNAMENTO_CON_MODIFICHE' ||
-                            voce.tipo === 'DVR_AGGIORNAMENTO_SENZA_MODIFICHE';
-
-                          if (isDVRVoce) {
-                            const isLeader = dvrGroupVoci.length > 0 && dvrGroupVoci[0].id === voce.id;
-                            if (!isLeader) {
-                              return <HiddenSortableItem key={voce.id} id={voce.id} disabled={reordering} />;
-                            }
-                            return (
-                              <SortableDVRGroupCard
-                                key={voce.id}
-                                voce={voce}
-                                groupVoci={dvrGroupVoci}
-                                tariffarioId={id!}
-                                expanded={expandedVoci.has(voce.id)}
-                                onToggle={() => toggleVoceExpanded(voce.id)}
-                                onDeleteGroup={() => handleDeleteDVRGroup(dvrGroupVoci)}
-                                onUpdateGroup={(updatedVoci, deletedIds) => {
-                                  setVoci(prev => {
-                                    const withoutDeleted = prev.filter(v => !deletedIds.includes(v.id));
-                                    const withUpdated = withoutDeleted.map(v => {
-                                      const u = updatedVoci.find(x => x.id === v.id);
-                                      return u || v;
-                                    });
-                                    const newOnes = updatedVoci.filter(u => !withoutDeleted.some(v => v.id === u.id));
-                                    return [...withUpdated, ...newOnes];
-                                  });
-                                }}
-                                disabled={reordering}
-                              />
-                            );
-                          }
-
-                          if (isVisitaMDLVoce && voce.prestazioneId) {
-                            const group = visitaMDLGroups.get(voce.prestazioneId) || [voce];
-                            const isLeader = group[0].id === voce.id;
-
-                            if (!isLeader) {
-                              // Voce secondaria: invisibile ma mantenuta nel DnD
-                              return <HiddenSortableItem key={voce.id} id={voce.id} disabled={reordering} />;
-                            }
-
-                            return (
-                              <SortableVisitaMDLGroupCard
-                                key={voce.id}
-                                voce={voce}
-                                groupVoci={group}
-                                tariffarioId={id!}
-                                expanded={expandedVoci.has(voce.id)}
-                                onToggle={() => toggleVoceExpanded(voce.id)}
-                                onDeleteGroup={() => handleDeleteVisitaMDLGroup(group)}
-                                onUpdateGroup={(updatedVoci, deletedIds) => {
-                                  setVoci(prev => {
-                                    const withoutDeleted = prev.filter(v => !deletedIds.includes(v.id));
-                                    const withUpdated = withoutDeleted.map(v => {
-                                      const u = updatedVoci.find(x => x.id === v.id);
-                                      return u || v;
-                                    });
-                                    const newOnes = updatedVoci.filter(u => !withoutDeleted.some(v => v.id === u.id));
-                                    return [...withUpdated, ...newOnes];
-                                  });
-                                }}
-                                disabled={reordering}
-                              />
-                            );
-                          }
-
-                          return (
-                            <SortableVoceCard
-                              key={voce.id}
-                              voce={voce}
-                              tariffarioId={id!}
-                              expanded={expandedVoci.has(voce.id)}
-                              onToggle={() => toggleVoceExpanded(voce.id)}
-                              onDelete={() => handleDeleteVoce(voce.id, getVoceDisplayName(voce))}
-                              onUpdate={(updatedVoce) => {
-                                setVoci(prev => prev.map(v => v.id === updatedVoce.id ? updatedVoce : v));
-                              }}
-                              disabled={reordering}
-                            />
-                          );
-                        })}
-                      </div>
-                    </SortableContext>
+                    {/* Voci divise in 3 sezioni come nella pagina di dettaglio e nel PDF.
+                        Il riordino (drag) resta possibile all'interno di ciascuna sezione. */}
+                    <div className="space-y-5">
+                      {SEZIONI_VOCI.map((sezione) => {
+                        const bucket = voci.filter(v => categoriaVoce(v.tipo) === sezione.key);
+                        if (bucket.length === 0) return null;
+                        const SezioneIcon = sezione.icon;
+                        return (
+                          <div key={sezione.key} className="space-y-2">
+                            <div className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide ${sezione.color}`}>
+                              <SezioneIcon className="h-3.5 w-3.5" />
+                              {sezione.label}
+                              <span className="text-gray-400 font-normal normal-case">({bucket.length})</span>
+                            </div>
+                            <SortableContext
+                              items={bucket.map(v => v.id)}
+                              strategy={verticalListSortingStrategy}
+                            >
+                              <div className="space-y-2">
+                                {bucket.map((voce) => renderVoceCard(voce))}
+                              </div>
+                            </SortableContext>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </DndContext>
                 )}
               </CardContent>
@@ -2588,7 +2630,7 @@ const VoceCard: React.FC<VoceCardProps> = ({ voce, tariffarioId, expanded, onTog
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={(e) => { e.stopPropagation(); setIsEditing(true); onToggle(); }}
+                onClick={(e) => { e.stopPropagation(); setIsEditing(true); if (!expanded) onToggle(); }}
                 title="Modifica voce"
               >
                 <Euro className="h-4 w-4 text-blue-500" />

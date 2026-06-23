@@ -261,7 +261,6 @@ router.post('/:id/clone', requirePermission('tariffari:update'), async (req, res
     try {
         const clone = await TariffarioAziendaleService.clone(
             req.params.id,
-            req.body,
             getEffectiveTenantId(req),
             req.person.personId
         );
@@ -270,10 +269,10 @@ router.post('/:id/clone', requirePermission('tariffari:update'), async (req, res
             data: clone
         });
     } catch (error) {
-        logger.error({ error: 'Operazione non riuscita', id: req.params.id }, 'Errore clonazione tariffario');
+        logger.error({ error: error.message, id: req.params.id }, 'Errore clonazione tariffario');
         res.status(400).json({
             success: false,
-            error: 'Errore interno del server'
+            error: error.message || 'Errore interno del server'
         });
     }
 });

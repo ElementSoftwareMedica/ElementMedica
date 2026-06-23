@@ -9,7 +9,7 @@
  * @project P56 - Medicina del Lavoro Sistema Completo - FASE 3
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
     Loader2,
@@ -143,6 +143,36 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
         },
         staleTime: 5 * 60 * 1000
     });
+
+    // Tutte le nomine attive → mappa companyProfileId → set dei ruoli attivi.
+    // Serve a colorare i pallini di stato accanto alle aziende nel dropdown.
+    const { data: nomineAttiveResp } = useQuery({
+        queryKey: ['nomine-attive-dots'],
+        queryFn: () => apiGet<{ data: NominaRuolo[] }>('/api/v1/clinica/nomine-ruolo', { stato: 'ATTIVA', limit: 1000 }),
+        enabled: isOpen,
+        staleTime: 60 * 1000
+    });
+    const nomineByCompany = useMemo(() => {
+        const map = new Map<string, Set<string>>();
+        for (const n of (nomineAttiveResp?.data || [])) {
+            const cid = n.companyTenantProfileId || n.site?.companyTenantProfileId;
+            if (!cid) continue;
+            if (!map.has(cid)) map.set(cid, new Set());
+            map.get(cid)!.add(n.tipoRuolo);
+        }
+        return map;
+    }, [nomineAttiveResp]);
+
+    // Stato nomina per azienda relativo al ruolo selezionato:
+    //  - green  → l'azienda ha già una nomina attiva del ruolo selezionato
+    //  - yellow → ha una nomina attiva di un altro ruolo (ma non quello selezionato)
+    //  - red    → nessuna nomina attiva
+    const getCompanyDotColor = useCallback((companyProfileId: string): 'green' | 'yellow' | 'red' => {
+        const roles = nomineByCompany.get(companyProfileId);
+        if (!roles || roles.size === 0) return 'red';
+        if (formData.tipoRuolo && roles.has(formData.tipoRuolo)) return 'green';
+        return 'yellow';
+    }, [nomineByCompany, formData.tipoRuolo]);
 
     const { data: personsData, isLoading: isLoadingPersons } = useQuery({
         queryKey: ['persons-autocomplete-nomina', personSearchText, formData.tipoRuolo],
@@ -350,8 +380,8 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
         if (!formData.dataInizio) newErrors.dataInizio = 'Data inizio obbligatoria';
         if (!formData.siteId && !formData.companyTenantProfileId)
             newErrors.association = 'Seleziona almeno una sede o un\'azienda';
-        if (formData.dataFine && formData.dataInizio && new Date(formData.dataFine) < new Date(formData.dataInizio))
-            newErrors.dataFine = 'Data fine non può precedere la data inizio';
+        if (formData.dataScadenza && formData.dataInizio && new Date(formData.dataScadenza) < new Date(formData.dataInizio))
+            newErrors.dataScadenza = 'Data scadenza non può precedere la data inizio';
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     }, [formData]);
@@ -575,24 +605,40 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
                                 {showCompanyDropdown && (
                                     <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-56 overflow-y-auto">
                                         {filteredCompanies.length > 0 ? (
-                                            filteredCompanies.map(c => (
-                                                <button
-                                                    key={getCompanyProfileId(c)}
-                                                    type="button"
-                                                    onClick={() => handleSelectCompany(c)}
-                                                    className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 dark:hover:bg-teal-900/30 hover:text-teal-700 dark:hover:text-teal-300 transition-colors border-b border-gray-100 dark:border-gray-700 last:border-b-0"
-                                                >
-                                                    <span className="font-medium">{c.ragioneSociale}</span>
-                                                    {(c.sites?.length || 0) > 0 && (
-                                                        <span className="ml-2 text-xs text-gray-400">{c.sites?.length} sed{c.sites?.length === 1 ? 'e' : 'i'}</span>
-                                                    )}
-                                                </button>
-                                            ))
+                                            filteredCompanies.map(c => {
+                                                const dot = getCompanyDotColor(getCompanyProfileId(c));
+                                                const dotClass = dot === 'green' ? 'bg-green-500' : dot === 'yellow' ? 'bg-amber-400' : 'bg-red-500';
+                                                const dotTitle = dot === 'green'
+                                                    ? 'Ha già una nomina attiva del ruolo selezionato'
+                                                    : dot === 'yellow'
+                                                        ? 'Ha una nomina attiva di un altro ruolo'
+                                                        : 'Nessuna nomina attiva';
+                                                return (
+                                                    <button
+                                                        key={getCompanyProfileId(c)}
+                                                        type="button"
+                                                        onClick={() => handleSelectCompany(c)}
+                                                        className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 dark:hover:bg-teal-900/30 hover:text-teal-700 dark:hover:text-teal-300 transition-colors border-b border-gray-100 dark:border-gray-700 last:border-b-0 flex items-center"
+                                                    >
+                                                        <span className={`inline-block h-2.5 w-2.5 rounded-full mr-2 flex-shrink-0 ${dotClass}`} title={dotTitle} />
+                                                        <span className="font-medium">{c.ragioneSociale}</span>
+                                                        {(c.sites?.length || 0) > 0 && (
+                                                            <span className="ml-2 text-xs text-gray-400">{c.sites?.length} sed{c.sites?.length === 1 ? 'e' : 'i'}</span>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })
                                         ) : (
                                             <div className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">Nessuna azienda trovata</div>
                                         )}
                                     </div>
                                 )}
+                            </div>
+                            {/* Legenda pallini stato nomina per azienda */}
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                                <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-green-500" /> Ha il ruolo selezionato</span>
+                                <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-amber-400" /> Ha altro ruolo</span>
+                                <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-red-500" /> Nessuna nomina</span>
                             </div>
                         </div>
                         <div>
@@ -648,7 +694,7 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
                         <Calendar className="h-4 w-4 text-gray-500" />
                         Date Nomina
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                                 Data Inizio <span className="text-red-500">*</span>
@@ -658,15 +704,10 @@ const NominaFormModal: React.FC<NominaFormModalProps> = ({
                             {errors.dataInizio && <p className="text-red-500 text-xs mt-1">{errors.dataInizio}</p>}
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Data Fine</label>
-                            <DatePickerElegante value={formData.dataFine}
-                                onChange={(date) => handleInputChange('dataFine', date ? date.toISOString().split('T')[0] : '')} theme="teal" />
-                            {errors.dataFine && <p className="text-red-500 text-xs mt-1">{errors.dataFine}</p>}
-                        </div>
-                        <div>
                             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Data Scadenza</label>
                             <DatePickerElegante value={formData.dataScadenza}
                                 onChange={(date) => handleInputChange('dataScadenza', date ? date.toISOString().split('T')[0] : '')} theme="teal" />
+                            {errors.dataScadenza && <p className="text-red-500 text-xs mt-1">{errors.dataScadenza}</p>}
                         </div>
                     </div>
                 </div>

@@ -599,23 +599,29 @@ const TariffarioAziendaleService = {
         });
         if (!source) throw new Error('Tariffario sorgente non trovato');
 
-        // Genera codice univoco (aggiunge _COPIA, poi _COPIA_2 ecc.)
-        const baseCode = `${source.codice}_COPIA`;
-        let finalCodice = baseCode;
+        // Genera nome e codice univoci: "<nome> Copia1", poi Copia2, ecc.
+        // (verifica unicità sia sul nome che sul codice nello stesso tenant)
+        let finalNome;
+        let finalCodice;
         let counter = 1;
         while (true) {
+            finalNome = `${source.nome} Copia${counter}`;
+            finalCodice = `${source.codice}_COPIA${counter}`;
             const exists = await prisma.tariffarioAziendale.findFirst({
-                where: { tenantId, codice: finalCodice, deletedAt: null }
+                where: {
+                    tenantId,
+                    deletedAt: null,
+                    OR: [{ nome: finalNome }, { codice: finalCodice }],
+                },
             });
             if (!exists) break;
-            finalCodice = `${baseCode}_${counter}`;
             counter++;
         }
 
         const nuovo = await prisma.tariffarioAziendale.create({
             data: {
                 codice: finalCodice,
-                nome: `${source.nome} (Copia)`,
+                nome: finalNome,
                 descrizione: source.descrizione,
                 convenzioneId: source.convenzioneId,
                 validoDa: source.validoDa,
@@ -1895,11 +1901,37 @@ const TariffarioAziendaleService = {
         const template = Handlebars.compile(templateHtml);
         const html = template(templateData);
 
-        // Genera PDF
+        // Header e footer ripetuti su OGNI pagina (Puppeteer displayHeaderFooter).
+        // I template usano stili inline (non hanno accesso al CSS della pagina) e
+        // font-size esplicito. Il logo è un data URL base64 → si carica in modo affidabile.
+        const esc = (s) => Handlebars.escapeExpression(s || '');
+        const headerTemplate = `
+            <div style="width:100%; font-size:8px; color:#64748b; padding:3px 10mm 0; box-sizing:border-box; -webkit-print-color-adjust:exact;">
+                <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #cbd5e1; padding-bottom:3px;">
+                    <span style="display:flex; align-items:center; gap:6px; min-width:0;">
+                        ${logoUrl ? `<img src="${logoUrl}" style="height:13px; width:auto;"/>` : ''}
+                        <span style="font-weight:600; color:#334155;">${esc(tariffario.nome)}</span>
+                    </span>
+                    <span style="white-space:nowrap;">Tariffario Medicina del Lavoro e Sicurezza</span>
+                </div>
+            </div>`;
+        const footerTemplate = `
+            <div style="width:100%; font-size:7.5px; color:#94a3b8; padding:0 10mm 3px; box-sizing:border-box;">
+                <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid #e2e8f0; padding-top:3px;">
+                    <span>${esc(tariffario.nome)} · Cod. ${esc(tariffario.codice)}</span>
+                    <span>${esc(tenant?.name)}</span>
+                    <span style="white-space:nowrap;">Pag. <span class="pageNumber"></span> / <span class="totalPages"></span></span>
+                </div>
+            </div>`;
+
+        // Genera PDF — margini top/bottom ampliati per ospitare header/footer ricorrenti
         const pdfBuffer = await pdfService.generatePDF(html, {
             format: 'A4',
             landscape: false,
-            margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' }
+            displayHeaderFooter: true,
+            headerTemplate,
+            footerTemplate,
+            margin: { top: '22mm', right: '10mm', bottom: '15mm', left: '10mm' }
         });
 
         // Nome file = nome del tariffario (sanitizzato), con fallback al codice

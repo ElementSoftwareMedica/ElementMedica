@@ -725,6 +725,32 @@ function risolviPrezzoVoce(voce, numDipendenti) {
     return { prezzo: parseFloat(fallback.prezzo) || 0, fascia: fallback, usaFasce: true };
 }
 
+/**
+ * Prezzo netto di una voce per una specifica azienda alla data indicata.
+ * Se la voce usa le fasce dipendenti (scaglioni), conta i dipendenti in forza
+ * alla data e applica il prezzo della fascia corrispondente; altrimenti prezzoBase.
+ * Usata dai generatori one-shot (sopralluogo, DVR, nomina, consulenza, uscita MC).
+ *
+ * @param {Object} voce - VoceTariffario (con eventuale fasceDipendenti[])
+ * @param {string} companyTenantProfileId
+ * @param {string} tenantId
+ * @param {Date} [dataRif]
+ * @returns {Promise<{ prezzo:number, fasciaSuffix:string }>}
+ */
+async function prezzoVocePerAzienda(voce, companyTenantProfileId, tenantId, dataRif = new Date()) {
+    const prezzoBase = voce ? parseFloat(voce.prezzoBase) || 0 : 0;
+    if (!voce?.usaFasceDipendenti || !companyTenantProfileId) {
+        return { prezzo: prezzoBase, fasciaSuffix: '' };
+    }
+    const d = new Date(dataRif);
+    const nDip = await _contaDipendentiPeriodo(companyTenantProfileId, tenantId, d, d);
+    const { prezzo, fascia } = risolviPrezzoVoce(voce, Math.max(nDip, 1));
+    return {
+        prezzo,
+        fasciaSuffix: fascia ? ` (fascia ${_labelFascia(fascia)} dip. — ${nDip} in forza)` : '',
+    };
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // PUBLIC API
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1183,7 +1209,9 @@ const MovimentoContabileGenerator = {
 
             const { voce } = await getVocePerTipo(companyTenantProfileId, tenantId, tipoVoce);
 
-            let prezzoNetto = voce ? parseFloat(voce.prezzoBase) : 0;
+            // Prezzo a fasce (scaglioni dipendenti) se la voce le usa
+            const { prezzo: prezzoNetto, fasciaSuffix } = await prezzoVocePerAzienda(
+                voce, companyTenantProfileId, tenantId, sopralluogo.dataEsecuzione);
             if (!prezzoNetto) {
                 result.warnings.push({
                     type: 'MISSING_VOCE',
@@ -1212,7 +1240,7 @@ const MovimentoContabileGenerator = {
                     importoLordo,
                     aliquotaIva,
                     dataEsecuzione: sopralluogo.dataEsecuzione,
-                    descrizione: `Sopralluogo ${isRspp ? 'RSPP' : 'MC'}${statoProgrammato ? ' (programmato)' : ''} – ${(esitoStato || 'programmato').toLowerCase().replace(/_/g, ' ')}`,
+                    descrizione: `Sopralluogo ${isRspp ? 'RSPP' : 'MC'}${statoProgrammato ? ' (programmato)' : ''} – ${(esitoStato || 'programmato').toLowerCase().replace(/_/g, ' ')}${fasciaSuffix}`,
                     branchType: 'MEDICA',
                     tenantId,
                     createdBy,
@@ -1312,7 +1340,9 @@ const MovimentoContabileGenerator = {
 
             const { voce } = await getVocePerTipo(companyTenantProfileId, tenantId, tipoVoce);
 
-            let prezzoNetto = voce ? parseFloat(voce.prezzoBase) : 0;
+            // Prezzo a fasce (scaglioni dipendenti) se la voce le usa
+            const { prezzo: prezzoNetto } = await prezzoVocePerAzienda(
+                voce, companyTenantProfileId, tenantId, nomina.dataInizio);
             if (!prezzoNetto) {
                 result.warnings.push({
                     type: 'MISSING_VOCE',
@@ -1452,11 +1482,16 @@ const MovimentoContabileGenerator = {
 
             const { voce } = await getVocePerTipo(consulenza.companyTenantProfileId, tenantId, 'CONSULENZA');
 
-            // Importo: da consulenza (se esplicitato) oppure da tariffario (prezzo orario × durata)
+            // Importo: da consulenza (se esplicitato) oppure da tariffario (prezzo orario × durata).
+            // Se la voce usa le fasce dipendenti, l'orario è quello della fascia dell'azienda.
             const durataOre = (consulenza.durataMinuti || 0) / 60;
             let prezzoNetto = consulenza.importo ? parseFloat(consulenza.importo) : 0;
+            let fasciaSuffix = '';
             if (!prezzoNetto && voce) {
-                prezzoNetto = parseFloat((parseFloat(voce.prezzoBase) * durataOre).toFixed(2));
+                const { prezzo: orario, fasciaSuffix: fs } = await prezzoVocePerAzienda(
+                    voce, consulenza.companyTenantProfileId, tenantId, consulenza.data);
+                prezzoNetto = parseFloat((orario * durataOre).toFixed(2));
+                fasciaSuffix = fs;
             }
             if (!prezzoNetto) {
                 result.warnings.push({
@@ -1489,7 +1524,7 @@ const MovimentoContabileGenerator = {
                     importoLordo,
                     aliquotaIva,
                     dataEsecuzione: consulenza.data,
-                    descrizione: `Consulenza MDL – ${consulenza.oggetto} (${consulenza.durataMinuti} min)`,
+                    descrizione: `Consulenza MDL – ${consulenza.oggetto} (${consulenza.durataMinuti} min)${fasciaSuffix}`,
                     branchType: 'MEDICA',
                     tenantId,
                     createdBy,
@@ -1568,7 +1603,10 @@ const MovimentoContabileGenerator = {
 
             const { voce } = await getVocePerTipo(companyTenantProfileId, tenantId, tipoVoce);
 
-            let prezzoNetto = voce ? parseFloat(voce.prezzoBase) : 0;
+            // Prezzo a fasce (scaglioni dipendenti) se la voce le usa: il DVR viene
+            // fatturato con il prezzo della fascia in cui ricade l'azienda.
+            const { prezzo: prezzoNetto, fasciaSuffix } = await prezzoVocePerAzienda(
+                voce, companyTenantProfileId, tenantId, dvr.dataEsecuzione);
             if (!prezzoNetto) {
                 result.warnings.push({
                     type: 'MISSING_VOCE',
@@ -1607,7 +1645,7 @@ const MovimentoContabileGenerator = {
                         importoLordo,
                         aliquotaIva,
                         dataEsecuzione: dvr.dataEsecuzione,
-                        descrizione: `DVR ${tipoDvrLabels[tipoVoce] || tipoVoce} – ${dvr.effettuatoDa || 'N/A'}`,
+                        descrizione: `DVR ${tipoDvrLabels[tipoVoce] || tipoVoce} – ${dvr.effettuatoDa || 'N/A'}${fasciaSuffix}`,
                         branchType: 'MEDICA',
                         tenantId,
                         createdBy,
