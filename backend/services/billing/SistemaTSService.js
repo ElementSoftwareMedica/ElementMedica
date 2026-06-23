@@ -130,16 +130,24 @@ export const TIPO_SPESA_MAP = {
 export function buildSistemaTSPayload(fattura, enteEmittente, cfPaziente) {
   const dispositivo = process.env.SISTEMA_TS_DISPOSITIVO || '0000000001';
 
-  const spese = (fattura.linee || []).map((l) => ({
-    tipo_spesa: TIPO_SPESA_MAP[fattura.tipoServizio] || 'SP',
-    flag_tipo_spesa: 'ticket', // oppure 'nessuno', 'esenzione_reddito', etc.
-    importo: Number(l.prezzoTotale),
-    aliquota_iva: Number(l.aliquotaIva),
-    // natura_iva: solo se IVA = 0
-    ...(Number(l.aliquotaIva) === 0 && l.natura
-      ? { natura_iva: l.natura }
-      : {}),
-  }));
+  // Schema AcubeAPI (POST /sistema-ts/expenses), verificato empiricamente sulla sandbox:
+  // - flag_tipo_spesa: INT (valori ammessi 1|2), NON stringa
+  // - aliquota_iva: deve essere POSITIVA → per le prestazioni esenti va OMESSA e si
+  //   invia solo natura_iva (es. N4 per le prestazioni mediche esenti art.10)
+  // - flag_pagamento_anticipato: INT (solo 1 ammesso) → opzionale, lo omettiamo
+  const spese = (fattura.linee || []).map((l) => {
+    const aliquota = Number(l.aliquotaIva) || 0;
+    const esente = aliquota === 0;
+    return {
+      tipo_spesa: TIPO_SPESA_MAP[fattura.tipoServizio] || 'SP',
+      flag_tipo_spesa: 1, // int: tipologia di spesa indicata
+      importo: Number(l.prezzoTotale),
+      // Esente → solo natura_iva (aliquota omessa); imponibile → aliquota positiva
+      ...(esente
+        ? { natura_iva: l.natura || 'N4' }
+        : { aliquota_iva: aliquota }),
+    };
+  });
 
   return {
     cf_proprietario: enteEmittente.codiceFiscale, // Obbligatorio
@@ -152,7 +160,6 @@ export function buildSistemaTSPayload(fattura, enteEmittente, cfPaziente) {
     data_pagamento: fattura.dataEmissione
       ? formatDate(fattura.dataEmissione)
       : undefined,
-    flag_pagamento_anticipato: false,
     tipo_documento: 'F', // F=Fattura, D=Documento Commerciale
     flag_opposizione: fattura.sistemaTsFlagOpp ?? 0, // 0=autorizza SistemaTS a condividere dati, 1=oppone
     pagamento_tracciato:

@@ -671,43 +671,52 @@ const EntiEmittentiPage: React.FC = () => {
                                     </label>
                                 </div>
                                 {form.sistemaTsAbilitato && (
-                                    <div className="grid grid-cols-3 gap-4 p-3 bg-violet-50 dark:bg-violet-900/20 rounded-lg border border-violet-200 dark:border-violet-800">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                                                PIN Code {editingEnte?.sistemaTsConfigurato && <span className="text-xs font-normal text-gray-400">(vuoto = invariato)</span>}
-                                            </label>
-                                            <input
-                                                value={form.sistemaTsPinCode}
-                                                maxLength={20}
-                                                placeholder={editingEnte?.sistemaTsConfigurato ? '••••••••••' : ''}
-                                                onChange={e => setForm(f => ({ ...f, sistemaTsPinCode: e.target.value }))}
-                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
-                                            />
+                                    <div className="p-3 bg-violet-50 dark:bg-violet-900/20 rounded-lg border border-violet-200 dark:border-violet-800 space-y-2">
+                                        {/* autoComplete=off su tutta la sezione per evitare che il browser
+                                            riempia il campo CF con email/username dell'account */}
+                                        <div className="grid grid-cols-3 gap-4 items-start">
+                                            <div className="flex flex-col">
+                                                <label className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">PIN Code</label>
+                                                <input
+                                                    value={form.sistemaTsPinCode}
+                                                    maxLength={20}
+                                                    name="sts-pincode"
+                                                    autoComplete="off"
+                                                    placeholder={editingEnte?.sistemaTsConfigurato ? '••••••••••' : ''}
+                                                    onChange={e => setForm(f => ({ ...f, sistemaTsPinCode: e.target.value }))}
+                                                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <label className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Codice Fiscale</label>
+                                                <input
+                                                    value={form.sistemaTsUsername}
+                                                    maxLength={16}
+                                                    name="sts-cf"
+                                                    autoComplete="off"
+                                                    autoCapitalize="characters"
+                                                    placeholder="es. RSSMRA80A01H501U"
+                                                    onChange={e => setForm(f => ({ ...f, sistemaTsUsername: e.target.value.toUpperCase().replace(/\s/g, '') }))}
+                                                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <label className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Password</label>
+                                                <input
+                                                    type="password"
+                                                    value={form.sistemaTsPassword}
+                                                    name="sts-password"
+                                                    autoComplete="new-password"
+                                                    onChange={e => setForm(f => ({ ...f, sistemaTsPassword: e.target.value }))}
+                                                    placeholder={editingEnte?.sistemaTsConfigurato ? '••••••••' : ''}
+                                                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                                />
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                                                Username (CF) {editingEnte?.sistemaTsConfigurato && <span className="text-xs font-normal text-gray-400">(vuoto = invariato)</span>}
-                                            </label>
-                                            <input
-                                                value={form.sistemaTsUsername}
-                                                maxLength={20}
-                                                placeholder={editingEnte?.sistemaTsConfigurato ? '••••••••••••••••' : ''}
-                                                onChange={e => setForm(f => ({ ...f, sistemaTsUsername: e.target.value.toUpperCase() }))}
-                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                                                Password {editingEnte?.sistemaTsConfigurato && <span className="text-xs font-normal text-gray-400">(vuoto = invariata)</span>}
-                                            </label>
-                                            <input
-                                                type="password"
-                                                value={form.sistemaTsPassword}
-                                                onChange={e => setForm(f => ({ ...f, sistemaTsPassword: e.target.value }))}
-                                                placeholder={editingEnte?.sistemaTsConfigurato ? '••••••••' : ''}
-                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                                            />
-                                        </div>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                            Credenziali del Sistema TS (MEF) dell'intestatario. Il <strong>Codice Fiscale</strong> è quello del medico/proprietario, non un'email.
+                                            {editingEnte?.sistemaTsConfigurato && ' Lascia un campo vuoto per non modificarlo.'}
+                                        </p>
                                     </div>
                                 )}
                             </div>
