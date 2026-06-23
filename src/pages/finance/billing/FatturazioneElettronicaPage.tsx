@@ -9,7 +9,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
     FileText, Send, CheckCircle2, XCircle, Clock, AlertTriangle,
     Euro, TrendingUp, Plus, Eye, Trash2, RefreshCw, CreditCard,
-    RotateCcw, Search, Filter, X
+    RotateCcw, Search, Filter, X, FileDown
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -17,6 +17,7 @@ import { CRUDButton, CRUDPrimaryButton, CRUDDeleteButton } from '../../../compon
 import { DatePickerElegante } from '@/components/ui/DatePickerElegante';
 import { useToast } from '../../../hooks/useToast';
 import { useConfirmDialog } from '../../../contexts/ConfirmDialogContext';
+import { apiDownloadWithFilename } from '../../../services/api';
 import {
     useFatturazione,
     FatturaElettronica,
@@ -161,6 +162,25 @@ const FatturazioneElettronicaPage: React.FC = () => {
             fetchStats();
         } catch (err: unknown) {
             showToast({ type: 'error', message: 'Errore invio SDI' });
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleScaricaPdf = async (fattura: FatturaElettronica) => {
+        setActionLoading(fattura.id);
+        try {
+            const { blob, filename } = await apiDownloadWithFilename(`/api/v1/billing/fatture/${fattura.id}/pdf`);
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename || `fattura-${fattura.numero}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (err: unknown) {
+            showToast({ type: 'error', message: 'Errore download PDF fattura' });
         } finally {
             setActionLoading(null);
         }
@@ -459,6 +479,15 @@ const FatturazioneElettronicaPage: React.FC = () => {
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center justify-end gap-1">
+                                                        {/* PDF (tutte le fatture: il PDF è generato dal documento) */}
+                                                        <button
+                                                            onClick={() => handleScaricaPdf(fattura)}
+                                                            disabled={actionLoading === fattura.id}
+                                                            title="Scarica PDF fattura"
+                                                            className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 transition-colors"
+                                                        >
+                                                            <FileDown className="h-3 w-3" /> PDF
+                                                        </button>
                                                         {/* Emetti (solo BOZZA) */}
                                                         {fattura.stato === 'BOZZA' && (
                                                             <button

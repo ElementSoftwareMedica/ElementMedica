@@ -121,7 +121,7 @@ router.get('/',
         updatedAt: e.updatedAt,
         // AcubeAPI è gestita centralmente da ElementMedica (SaaS) → sempre true
         acubeConfigurato: true,
-        sistemaTsConfigurato: !!(e.sistemaTsPinCode && e.sistemaTsUsername),
+        sistemaTsConfigurato: !!(e.sistemaTsPinCode && e.sistemaTsUsername && e.sistemaTsPassword),
       }));
 
       return res.json({ data: result });
@@ -161,7 +161,7 @@ router.get('/:id',
           sistemaTsPassword: undefined,
           // SaaS model: AcubeAPI è sempre gestita da ElementMedica
           acubeConfigurato: true,
-          sistemaTsConfigurato: !!(ente.sistemaTsPinCode && ente.sistemaTsUsername),
+          sistemaTsConfigurato: !!(ente.sistemaTsPinCode && ente.sistemaTsUsername && ente.sistemaTsPassword),
         }
       });
     } catch (error) {
@@ -241,7 +241,7 @@ router.post('/',
           sistemaTsPassword: undefined,
           // SaaS model: sempre true
           acubeConfigurato: true,
-          sistemaTsConfigurato: !!(ente.sistemaTsPinCode && ente.sistemaTsUsername),
+          sistemaTsConfigurato: !!(ente.sistemaTsPinCode && ente.sistemaTsUsername && ente.sistemaTsPassword),
         }
       });
     } catch (error) {
@@ -331,7 +331,7 @@ router.put('/:id',
           sistemaTsPassword: undefined,
           // SaaS model: sempre true
           acubeConfigurato: true,
-          sistemaTsConfigurato: !!(updated.sistemaTsPinCode && updated.sistemaTsUsername),
+          sistemaTsConfigurato: !!(updated.sistemaTsPinCode && updated.sistemaTsUsername && updated.sistemaTsPassword),
         }
       });
     } catch (error) {

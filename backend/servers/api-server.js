@@ -162,6 +162,7 @@ import DefaultTemplateService from '../services/templates/DefaultTemplateService
 // P97: Fatturazione Elettronica — SDI polling scheduler
 import { startSdiPolling } from '../services/billing/SdiPollingScheduler.js';
 import { startPeriodicBilling } from '../services/billing/PeriodicBillingScheduler.js';
+import { startSistemaTSBatch } from '../services/billing/SistemaTSBatchScheduler.js';
 // P66: MDL Giudizi EOD email notifications
 import GiudizioEmailService from '../services/clinical/GiudizioEmailService.js';
 import IdoneityNotificationService from '../services/clinical/IdoneityNotificationService.js';
@@ -1313,6 +1314,11 @@ class APIServer {
           // (spese fisse/ricorrenti del tariffario aziendale) per tutte le aziende.
           // 1° del mese, 03:00 Europe/Rome — orario di basso carico. Idempotente per periodo.
           startPeriodicBilling(cron);
+
+          // P97: SistemaTS — trasmissione giornaliera delle spese sanitarie pending
+          // (rete di sicurezza per i termini di legge; l'invio ideale è immediato
+          // all'emissione). 04:15 Europe/Rome — fascia distinta dagli altri job.
+          startSistemaTSBatch(cron);
 
           // P66/P71: MDL — Nightly EOD Giudizi Idoneità notifications + ZIP aziende (22:00 Italy time)
           cron.schedule('0 22 * * *', async () => {

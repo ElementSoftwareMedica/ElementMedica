@@ -358,6 +358,19 @@ export const useFatturazione = () => {
         return res.data;
     }, []);
 
+    /**
+     * Recupera il dettaglio completo di un ente emittente (GET /:id).
+     * Include sistemaTsPinCode e sistemaTsUsername (la password non è mai esposta dal backend),
+     * necessari per popolare correttamente il form di modifica.
+     */
+    const getEnteEmittente = useCallback(async (id: string): Promise<EnteEmittente & {
+        sistemaTsPinCode?: string;
+        sistemaTsUsername?: string;
+    }> => {
+        const res = await apiGet<{ data: EnteEmittente & { sistemaTsPinCode?: string; sistemaTsUsername?: string } }>(`/api/v1/billing/enti-emittenti/${id}`);
+        return res.data;
+    }, []);
+
     const eliminaEnteEmittente = useCallback(async (id: string, deletionReason: string): Promise<void> => {
         await apiDeleteWithPayload(`/api/v1/billing/enti-emittenti/${id}`, { deletionReason });
     }, []);
@@ -393,6 +406,7 @@ export const useFatturazione = () => {
         fetchEntiEmittenti,
         creaEnteEmittente,
         aggiornaEnteEmittente,
+        getEnteEmittente,
         eliminaEnteEmittente,
         testConnessioneAcube,
         testConnessioneSistemaTS,

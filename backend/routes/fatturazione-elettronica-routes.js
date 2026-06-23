@@ -67,7 +67,8 @@ const emitDocumentRespectingHealthRules = async (fatturaId, tenantId) => {
     });
 
     if (existing.tipoDocumento !== 'NOTA_CREDITO' && existing.enteEmittente?.sistemaTsAbilitato && Number(existing.sistemaTsFlagOpp ?? 0) === 0) {
-      await sincronizzaSistemaTS(fatturaId, existing.cessionarioCF, tenantId).catch(tsError => {
+      // cfPaziente = null → derivato dal clientePersona (paziente effettivo) con fallback al cessionario
+      await sincronizzaSistemaTS(fatturaId, null, tenantId).catch(tsError => {
         logger.warn('Documento sanitario emesso ma SistemaTS non sincronizzato', {
           fatturaId,
           error: tsError.message,
@@ -782,7 +783,8 @@ router.post('/:id/emetti',
         let sistemaTs = null;
         if (existing.enteEmittente?.sistemaTsAbilitato && Number(existing.sistemaTsFlagOpp ?? 0) === 0) {
           try {
-            sistemaTs = await sincronizzaSistemaTS(id, existing.cessionarioCF, tenantId);
+            // cfPaziente = null → derivato dal clientePersona (paziente) con fallback al cessionario
+            sistemaTs = await sincronizzaSistemaTS(id, null, tenantId);
           } catch (tsError) {
             logger.warn('Fattura sanitaria emessa ma SistemaTS non sincronizzato', {
               fatturaId: id,
@@ -1227,7 +1229,7 @@ router.get('/:id/pdf',
     } catch (error) {
       logger.error('Errore GET fattura/:id/pdf', { error: error.message });
       if (error.message.includes('non trovata')) {
-        return res.status(404).json({ error: 'Errore interno del server' });
+        return res.status(404).json({ error: 'Fattura non trovata' });
       }
       return res.status(500).json({ error: 'Errore interno del server' });
     }

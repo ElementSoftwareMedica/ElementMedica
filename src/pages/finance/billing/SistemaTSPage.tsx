@@ -274,8 +274,18 @@ const SistemaTSPage: React.FC = () => {
 
     const handleBatchSync = async (enteId: string) => {
         try {
-            const res = await apiPost<{ message: string }>('/api/v1/billing/sistema-ts/sincronizza-batch', { enteEmittenteId: enteId });
-            showToast({ type: 'success', message: res.message });
+            const res = await apiPost<{ message: string; successi?: number; falliti?: number }>(
+                '/api/v1/billing/sistema-ts/sincronizza-batch',
+                // enteId vuoto → sincronizza tutte le pending del tenant
+                enteId ? { enteEmittenteId: enteId } : {}
+            );
+            // Se ci sono fallimenti (es. credenziali mancanti), mostra warning invece di success
+            const hasFailures = (res.falliti ?? 0) > 0;
+            const noSuccess = (res.successi ?? 0) === 0 && hasFailures;
+            showToast({
+                type: noSuccess ? 'error' : hasFailures ? 'warning' : 'success',
+                message: res.message,
+            });
             await loadDashboard();
         } catch (err: unknown) {
             showToast({ type: 'error', message: 'Errore sincronizzazione batch' });

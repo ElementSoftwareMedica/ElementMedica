@@ -51,7 +51,8 @@ router.get('/dashboard',
           tipo: true,
           codiceFiscale: true,
           sistemaTsPinCode: true,
-          sistemaTsUsername: true
+          sistemaTsUsername: true,
+          sistemaTsPassword: true
         }
       });
 
@@ -97,15 +98,15 @@ router.get('/dashboard',
             denominazione: ente.denominazione,
             tipo: ente.tipo,
             codiceFiscale: ente.codiceFiscale,
-            // SaaS: ACube usa master token ElementMedica, configurazione = credenziali SistemaTS
-            configurato: !!(ente.sistemaTsPinCode && ente.sistemaTsUsername),
+            // SaaS: ACube usa master token ElementMedica, configurazione = credenziali SistemaTS complete
+            configurato: !!(ente.sistemaTsPinCode && ente.sistemaTsUsername && ente.sistemaTsPassword),
             stats30giorni: { totale, successi, errori, warnings: totale - successi - errori },
             ultimaSync: ultimoLog
           };
         })
       );
 
-      // Fatture pending (cliniche, senza sistemaTsProtocol)
+      // Fatture pending (cliniche, senza sistemaTsProtocol, escluse le opposizioni)
       const fatturePending = await prisma.fatturaElettronica.count({
         where: {
           tenantId,
@@ -113,7 +114,8 @@ router.get('/dashboard',
           stato: { in: ['EMESSA', 'PAGATA'] },
           tipoServizio: { in: ['VISITA', 'PRESTAZIONE_CLINICA'] },
           sistemaTsProtocol: null,
-          enteEmittente: { sistemaTsAbilitato: true }
+          sistemaTsFlagOpp: 0,
+          enteEmittente: { sistemaTsAbilitato: true, deletedAt: null }
         }
       });
 
@@ -164,15 +166,6 @@ router.post('/sincronizza',
 
       const result = await sincronizzaSistemaTS(fatturaId, cfPaziente, tenantId);
 
-      if (!result.success) {
-        return res.status(422).json({
-          ok: false,
-          error: result.error,
-          outcome: result.outcome,
-          messages: result.messages
-        });
-      }
-
       logger.info('Spesa sanitaria inviata a SistemaTS', {
         fatturaId,
         protocol: result.protocol,
@@ -187,7 +180,23 @@ router.post('/sincronizza',
         message: `Spesa inviata al Sistema TS. Protocollo: ${result.protocol}`
       });
     } catch (error) {
-      logger.error('Errore POST sistema-ts/sincronizza', { error: error.message });
+      logger.error('Errore POST sistema-ts/sincronizza', { error: error.message, code: error.code });
+      // Errori di pre-condizione/business → 422 con messaggio chiaro (no dettagli interni)
+      if (error.code === 'SISTEMA_TS_CREDENZIALI_MANCANTI') {
+        return res.status(422).json({ ok: false, error: 'Credenziali SistemaTS mancanti per l\'ente emittente di questa fattura', code: error.code });
+      }
+      if (error.code === 'SISTEMA_TS_CF_NON_VALIDO') {
+        return res.status(422).json({ ok: false, error: 'Codice fiscale del paziente mancante o non valido sulla fattura', code: error.code });
+      }
+      if (error.code === 'SISTEMA_TS_RIFIUTATA') {
+        return res.status(422).json({ ok: false, error: 'Spesa rifiutata dal Sistema TS', code: error.code });
+      }
+      if (error.message?.includes('non abilitato')) {
+        return res.status(422).json({ ok: false, error: 'SistemaTS non abilitato per l\'ente emittente' });
+      }
+      if (error.message?.includes('non trovata')) {
+        return res.status(404).json({ error: 'Fattura non trovata' });
+      }
       return res.status(500).json({ error: 'Errore interno del server' });
     }
   }
@@ -204,7 +213,10 @@ router.post('/sincronizza-batch',
   async (req, res) => {
     try {
       const tenantId = getEffectiveTenantId(req);
+      // Opzionale: limita il batch a un singolo ente emittente
+      const { enteEmittenteId } = req.body || {};
 
+      const BATCH_LIMIT = 200; // limite di sicurezza per richiesta on-demand
       const fatturePending = await prisma.fatturaElettronica.findMany({
         where: {
           tenantId,
@@ -212,48 +224,60 @@ router.post('/sincronizza-batch',
           stato: { in: ['EMESSA', 'PAGATA'] },
           tipoServizio: { in: ['VISITA', 'PRESTAZIONE_CLINICA'] },
           sistemaTsProtocol: null,
+          sistemaTsFlagOpp: 0, // i pazienti che si oppongono NON vengono trasmessi
+          ...(enteEmittenteId ? { enteEmittenteId } : {}),
           enteEmittente: { sistemaTsAbilitato: true, deletedAt: null }
         },
         select: {
           id: true,
-          numero: true,
-          cessionarioCF: true,
-          cessionarioDenominazione: true
+          numero: true
         },
-        take: 50 // Limite sicurezza
+        orderBy: { dataEmissione: 'asc' },
+        take: BATCH_LIMIT
       });
 
       if (fatturePending.length === 0) {
-        return res.json({ message: 'Nessuna fattura pending da sincronizzare', results: [] });
+        return res.json({ message: 'Nessuna fattura pending da sincronizzare', results: [], successi: 0, falliti: 0 });
       }
 
       const results = [];
       for (const fattura of fatturePending) {
         try {
+          // cfPaziente = null → derivato internamente da resolveCfCittadino
           const result = await sincronizzaSistemaTS(fattura.id, null, tenantId);
           results.push({
             fatturaId: fattura.id,
             numero: fattura.numero,
-            ok: result.success,
-            protocol: result.protocol,
-            error: result.error
+            ok: true,
+            protocol: result.protocol
           });
         } catch (err) {
-          logger.warn('Errore sincronizzazione singola fattura SistemaTS', { fatturaId: fattura.id, error: 'Operazione non riuscita', tenantId });
+          // Messaggi utente categorizzati (no raw error.message in HTTP response — F330)
+          let errMsg = 'Errore sincronizzazione fattura';
+          if (err.code === 'SISTEMA_TS_CREDENZIALI_MANCANTI') errMsg = 'Credenziali SistemaTS mancanti per l\'ente emittente';
+          else if (err.code === 'SISTEMA_TS_CF_NON_VALIDO') errMsg = 'Codice fiscale paziente mancante o non valido';
+          else if (err.code === 'SISTEMA_TS_RIFIUTATA') errMsg = 'Spesa rifiutata dal Sistema TS';
+          logger.warn('Errore sincronizzazione singola fattura SistemaTS', { fatturaId: fattura.id, code: err.code, tenantId });
           results.push({
             fatturaId: fattura.id,
             numero: fattura.numero,
             ok: false,
-            error: 'Errore sincronizzazione fattura' // F330: no raw error.message in HTTP response
+            error: errMsg,
+            code: err.code || null
           });
         }
       }
 
       const successi = results.filter(r => r.ok).length;
-      logger.info('Batch SistemaTS completato', { tenantId, totale: results.length, successi });
+      const falliti = results.length - successi;
+      const troncato = fatturePending.length === BATCH_LIMIT;
+      logger.info('Batch SistemaTS completato', { tenantId, totale: results.length, successi, falliti, troncato });
 
       return res.json({
-        message: `Batch completato: ${successi}/${results.length} fatture sincronizzate`,
+        message: `Sincronizzazione completata: ${successi}/${results.length} trasmesse${falliti > 0 ? `, ${falliti} con errori` : ''}${troncato ? ` (limite ${BATCH_LIMIT} per richiesta — riesegui per le restanti)` : ''}`,
+        successi,
+        falliti,
+        troncato,
         results
       });
     } catch (error) {

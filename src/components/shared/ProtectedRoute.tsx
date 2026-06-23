@@ -19,7 +19,7 @@ interface ProtectedRouteProps {
  */
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ resource, action, requiredFeature, superAdminOnly, children }) => {
   const { isAuthenticated, isLoading, hasPermission, user } = useAuth();
-  const { hasFeature } = useTenantAccess();
+  const { hasFeature, hasLoaded: featuresLoaded } = useTenantAccess();
 
   // Calcola se l'utente è global admin (ADMIN o SUPER_ADMIN) — non include TENANT_ADMIN
   const isGlobalAdmin = user?.globalRole === 'ADMIN' || user?.globalRole === 'SUPER_ADMIN' ||
@@ -42,6 +42,17 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ resource, action, requi
   }
 
   if (requiredFeature) {
+    // Attendi il caricamento delle feature del tenant prima di decidere:
+    // evita il flash "Funzionalità non disponibile" mentre i dati sono in arrivo.
+    if (!featuresLoaded) {
+      return (
+        <div className="h-screen flex justify-center items-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          <span className="ml-3 text-gray-600">Caricamento...</span>
+        </div>
+      );
+    }
+
     const required = Array.isArray(requiredFeature) ? requiredFeature : [requiredFeature];
     const hasRequiredFeature = required.some(feature => hasFeature(feature));
 

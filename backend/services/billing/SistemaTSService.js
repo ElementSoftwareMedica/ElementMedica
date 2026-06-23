@@ -169,6 +169,36 @@ function formatDate(d) {
   return dt.toISOString().split('T')[0];
 }
 
+/**
+ * Valida un codice fiscale italiano (persona fisica: 16 alfanumerici).
+ * Lenient: accetta anche CF numerici a 11 cifre (casi particolari).
+ * @param {string} cf
+ * @returns {boolean}
+ */
+export function isValidCodiceFiscale(cf) {
+  if (!cf || typeof cf !== 'string') return false;
+  const norm = cf.trim().toUpperCase();
+  return /^[A-Z0-9]{16}$/.test(norm) || /^[0-9]{11}$/.test(norm);
+}
+
+/**
+ * Risolve il CF del cittadino (paziente) a cui è intestata la spesa sanitaria.
+ * Priorità: CF esplicito → cliente persona (il paziente effettivo, anche con
+ * terzo pagante) → cessionario della fattura.
+ *
+ * @param {object} fattura - FatturaElettronica con relazione clientePersona
+ * @param {string|null} cfEsplicito
+ * @returns {string|null}
+ */
+export function resolveCfCittadino(fattura, cfEsplicito = null) {
+  const candidato =
+    cfEsplicito ||
+    (fattura.clienteType === 'PERSONA' ? fattura.clientePersona?.taxCode : null) ||
+    fattura.cessionarioCF ||
+    null;
+  return candidato ? candidato.trim().toUpperCase() : null;
+}
+
 // ============================================================================
 // SINCRONIZZAZIONE - Invia + aggiorna DB
 // ============================================================================
@@ -177,7 +207,8 @@ function formatDate(d) {
  * Invia spesa al SistemaTS e salva il log + aggiorna FatturaElettronica
  *
  * @param {string} fatturaId
- * @param {string} cfPaziente - CF paziente dalla tessera sanitaria
+ * @param {string|null} cfPaziente - CF paziente esplicito (opzionale: se null
+ *        viene derivato dalla fattura via resolveCfCittadino)
  * @param {string} tenantId
  */
 export async function sincronizzaSistemaTS(fatturaId, cfPaziente, tenantId) {
@@ -186,6 +217,7 @@ export async function sincronizzaSistemaTS(fatturaId, cfPaziente, tenantId) {
     include: {
       linee: true,
       enteEmittente: true,
+      clientePersona: { select: { taxCode: true } },
     },
   });
 
@@ -194,13 +226,33 @@ export async function sincronizzaSistemaTS(fatturaId, cfPaziente, tenantId) {
     throw new Error('SistemaTS non abilitato per questo ente emittente');
   }
 
+  // Pre-check credenziali: errore chiaro e distinguibile (code) se mancanti
+  const { sistemaTsPinCode, sistemaTsUsername, sistemaTsPassword } = fattura.enteEmittente;
+  if (!sistemaTsPinCode || !sistemaTsUsername || !sistemaTsPassword) {
+    const err = new Error(
+      `Credenziali SistemaTS mancanti per l'ente "${fattura.enteEmittente.denominazione}"`
+    );
+    err.code = 'SISTEMA_TS_CREDENZIALI_MANCANTI';
+    throw err;
+  }
+
+  // Risolve e valida il CF del cittadino (paziente)
+  const cfCittadino = resolveCfCittadino(fattura, cfPaziente);
+  if (!isValidCodiceFiscale(cfCittadino)) {
+    const err = new Error(
+      `Codice fiscale paziente mancante o non valido per la fattura ${fattura.numero}`
+    );
+    err.code = 'SISTEMA_TS_CF_NON_VALIDO';
+    throw err;
+  }
+
   const credentials = {
-    pinCode: fattura.enteEmittente.sistemaTsPinCode,
-    username: fattura.enteEmittente.sistemaTsUsername,
-    password: fattura.enteEmittente.sistemaTsPassword,
+    pinCode: sistemaTsPinCode,
+    username: sistemaTsUsername,
+    password: sistemaTsPassword,
   };
 
-  const payload = buildSistemaTSPayload(fattura, fattura.enteEmittente, cfPaziente);
+  const payload = buildSistemaTSPayload(fattura, fattura.enteEmittente, cfCittadino);
 
   let result;
   let errorMessage = null;
@@ -228,22 +280,37 @@ export async function sincronizzaSistemaTS(fatturaId, cfPaziente, tenantId) {
     },
   });
 
-  // Aggiorna fattura se successo
-  if (result && result.outcome !== 1) {
-    await prisma.fatturaElettronica.update({
-      where: { id: fatturaId },
-      data: {
-        sistemaTsProtocol: result.protocol ?? null,
-        sistemaTsOutcome: result.outcome,
-        sistemaTsMessages: result.messages ?? null,
-        sistemaTsSyncAt: new Date(),
-      },
-    });
-  }
-
+  // Errore di trasmissione (rete/HTTP/AcubeAPI)
   if (errorMessage) {
     throw new Error(errorMessage);
   }
 
-  return result;
+  // outcome === 1 = spesa RIFIUTATA dal SistemaTS → fallimento (non aggiorna la fattura)
+  if (result && result.outcome === 1) {
+    const err = new Error(
+      `Spesa rifiutata dal Sistema TS${result.messages ? ': ' + JSON.stringify(result.messages) : ''}`
+    );
+    err.code = 'SISTEMA_TS_RIFIUTATA';
+    err.outcome = result.outcome;
+    err.messages = result.messages ?? null;
+    throw err;
+  }
+
+  // Successo → marca la fattura come trasmessa
+  await prisma.fatturaElettronica.update({
+    where: { id: fatturaId },
+    data: {
+      sistemaTsProtocol: result?.protocol ?? null,
+      sistemaTsOutcome: result?.outcome ?? null,
+      sistemaTsMessages: result?.messages ?? null,
+      sistemaTsSyncAt: new Date(),
+    },
+  });
+
+  return {
+    success: true,
+    protocol: result?.protocol ?? null,
+    outcome: result?.outcome ?? null,
+    messages: result?.messages ?? null,
+  };
 }

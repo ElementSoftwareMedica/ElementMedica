@@ -85,6 +85,9 @@ export const useTenantAccess = () => {
   const [accessibleTenants, setAccessibleTenants] = useState<AccessibleTenant[]>([]);
   const [currentTenantId, setCurrentTenantId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // true una volta che il primo caricamento tenant/feature è concluso (cache, fetch o assenza auth).
+  // Serve a evitare il flash "Funzionalità non disponibile" prima che le feature siano note.
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
 
@@ -110,6 +113,7 @@ export const useTenantAccess = () => {
     if (!isAuthenticated) {
       setAccessibleTenants([]);
       setError(null);
+      setHasLoaded(true);
       return;
     }
 
@@ -123,6 +127,7 @@ export const useTenantAccess = () => {
       const cachedTenants = accessibleTenantsCache.data;
       setAccessibleTenants(cachedTenants);
       setCurrentTenantId(resolveCurrentTenantId(cachedTenants));
+      setHasLoaded(true);
       return;
     }
 
@@ -175,6 +180,7 @@ export const useTenantAccess = () => {
     } finally {
       loadingRef.current = false;
       setLoading(false);
+      setHasLoaded(true);
     }
   }, [isAuthenticated, hydrateTenantsFromStorage]); // currentTenantId rimosso: leggiamo localStorage direttamente
 
@@ -286,6 +292,7 @@ export const useTenantAccess = () => {
       initialLoadRef.current = false;
       setAccessibleTenants([]);
       setCurrentTenantId(null);
+      setHasLoaded(false);
       accessibleTenantsCache = null;
       try {
         localStorage.removeItem(TENANTS_STORAGE_KEY);
@@ -340,6 +347,7 @@ export const useTenantAccess = () => {
     currentTenantId,
     currentTenant: getCurrentTenant(),
     loading,
+    hasLoaded,
     error,
     switching,
 

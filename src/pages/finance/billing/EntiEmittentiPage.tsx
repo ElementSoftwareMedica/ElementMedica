@@ -221,7 +221,7 @@ const EntiEmittentiPage: React.FC = () => {
 
     const {
         entiEmittenti, fetchEntiEmittenti,
-        creaEnteEmittente, aggiornaEnteEmittente, eliminaEnteEmittente,
+        creaEnteEmittente, aggiornaEnteEmittente, getEnteEmittente, eliminaEnteEmittente,
         testConnessioneSistemaTS,
     } = useFatturazione();
 
@@ -305,8 +305,11 @@ const EntiEmittentiPage: React.FC = () => {
         setShowForm(true);
     };
 
-    const openEdit = (ente: EnteEmittente) => {
+    const openEdit = async (ente: EnteEmittente) => {
         setEditingEnte(ente);
+        // Popola subito con i dati di lista (anagrafica); le credenziali SistemaTS
+        // (pinCode/username) arrivano dal dettaglio GET /:id — la password non è mai
+        // esposta dal backend (resta vuota = invariata).
         setForm({
             denominazione: ente.denominazione,
             label: (ente as any).label || '',
@@ -331,6 +334,18 @@ const EntiEmittentiPage: React.FC = () => {
             isActive: ente.isActive,
         });
         setShowForm(true);
+
+        // Recupera il dettaglio completo per popolare le credenziali SistemaTS
+        try {
+            const full = await getEnteEmittente(ente.id);
+            setForm(f => ({
+                ...f,
+                sistemaTsPinCode: full.sistemaTsPinCode || '',
+                sistemaTsUsername: full.sistemaTsUsername || '',
+            }));
+        } catch {
+            // In caso di errore il form resta utilizzabile con i campi credenziali vuoti
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
