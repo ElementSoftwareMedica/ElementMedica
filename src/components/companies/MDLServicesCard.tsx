@@ -817,37 +817,47 @@ const MDLServicesCard: React.FC<MDLServicesCardProps> = ({
     // P59: Prepara headers per cross-tenant operations
     const operateTenantHeaders = tenantId ? { 'X-Operate-Tenant-Id': tenantId } : undefined;
 
-    // Carica uscite MC quando si espande la sezione
+    // OTTIMIZZAZIONE: carica i conteggi di uscite MC e consulenze una sola volta al
+    // mount (così i contatori non restano a 0 finché non si espande la sezione).
+    // Le liste sono mantenute aggiornate localmente da create/update/delete.
     useEffect(() => {
-        if (expandedSection === 'uscite_mc' && companyTenantProfileId) {
-            setLoadingUsciteMC(true);
+        if (!companyTenantProfileId) return;
+        let cancelled = false;
+        setLoadingUsciteMC(true);
+        setLoadingConsulenze(true);
+        Promise.allSettled([
+            usciteMCApi.getAll({ companyTenantProfileId }),
+            consulenzeMDLApi.getAll({ companyTenantProfileId }),
+        ])
+            .then(([usciteRes, consulenzeRes]) => {
+                if (cancelled) return;
+                if (usciteRes.status === 'fulfilled') setUsciteMC(usciteRes.value.data || []);
+                if (consulenzeRes.status === 'fulfilled') setConsulenze(consulenzeRes.value.data || []);
+            })
+            .finally(() => {
+                if (cancelled) return;
+                setLoadingUsciteMC(false);
+                setLoadingConsulenze(false);
+            });
+        return () => { cancelled = true; };
+    }, [companyTenantProfileId]);
+
+    // All'espansione di "uscite MC" carica solo gli helper del modal (medici e voci
+    // una-tantum): la lista è già caricata al mount.
+    useEffect(() => {
+        if (expandedSection === 'uscite_mc' && companyTenantProfileId && mediciDisponibili.length === 0) {
             Promise.all([
-                usciteMCApi.getAll({ companyTenantProfileId }),
                 usciteMCApi.getMediciDisponibili(companyTenantProfileId),
                 usciteMCApi.getVociUnaTantum(companyTenantProfileId)
             ])
-                .then(([usciteRes, mediciRes, vociRes]) => {
-                    setUsciteMC(usciteRes.data || []);
+                .then(([mediciRes, vociRes]) => {
                     const medici = mediciRes.data || [];
                     setMediciDisponibili(medici);
                     setVociUnaTantum(vociRes.data || []);
-                    // Auto-seleziona il medico nominato solo se l'utente non ha già scelto
                     const primario = medici.find(m => m.isPrimario);
                     if (primario) setNewUscitaMC(prev => ({ ...prev, medicoId: prev.medicoId || primario.id }));
                 })
-                .catch(() => showToast({ type: 'error', message: 'Errore nel caricamento delle uscite MC' }))
-                .finally(() => setLoadingUsciteMC(false));
-        }
-    }, [expandedSection, companyTenantProfileId]);
-
-    // Carica consulenze MDL quando si espande la sezione
-    useEffect(() => {
-        if (expandedSection === 'consulenze' && companyTenantProfileId) {
-            setLoadingConsulenze(true);
-            consulenzeMDLApi.getAll({ companyTenantProfileId })
-                .then(res => setConsulenze(res.data || []))
-                .catch(() => showToast({ type: 'error', message: 'Errore nel caricamento delle consulenze' }))
-                .finally(() => setLoadingConsulenze(false));
+                .catch(() => { /* non bloccante */ });
         }
     }, [expandedSection, companyTenantProfileId]);
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Building2,
@@ -462,49 +462,9 @@ const CompanyDetails: React.FC = () => {
       ];
       setMdlDocuments(loadedMdlDocs);
 
-      // Giudizi di idoneità collegati all'azienda (per il tab Documenti)
-      try {
-        const giudiziRes = await apiGet<{ data: GiudizioDocItem[] }>(
-          `/api/v1/clinica/giudizi-idoneita?companyTenantProfileId=${companyData.companyTenantProfileId}&limit=200`,
-          {}, { headers: operateTenantHeaders }
-        );
-        setGiudizi(giudiziRes?.data || []);
-      } catch {
-        setGiudizi([]);
-      }
-
-      // Preventivi collegati all'azienda (per il tab Documenti)
-      try {
-        const prevRes = await apiGet<{ data: PreventivoDocItem[] }>(
-          `/api/v1/preventivi?clienteId=${companyData.companyTenantProfileId}&clienteType=azienda&limit=200`,
-          {}, { headers: operateTenantHeaders }
-        );
-        setPreventivi(prevRes?.data || []);
-      } catch {
-        setPreventivi([]);
-      }
-
-      // Fatture collegate all'azienda
-      try {
-        const fattRes = await apiGet<{ data: FatturaDocItem[] }>(
-          `/api/v1/billing/fatture?clienteAziendaId=${companyData.companyTenantProfileId}&limit=200`,
-          {}, { headers: operateTenantHeaders }
-        );
-        setFatture(fattRes?.data || []);
-      } catch {
-        setFatture([]);
-      }
-
-      // Allegati 3B (INAIL) collegati all'azienda
-      try {
-        const allRes = await apiGet<{ data: Allegato3BDocItem[] }>(
-          `/api/v1/clinica/allegato-3b?companyTenantProfileId=${companyData.companyTenantProfileId}`,
-          {}, { headers: operateTenantHeaders }
-        );
-        setAllegati3B(allRes?.data || []);
-      } catch {
-        setAllegati3B([]);
-      }
+      // I documenti del tab "Documenti" (giudizi, preventivi, fatture, allegati 3B)
+      // vengono caricati lazy solo quando quel tab è attivo (vedi useEffect dedicato),
+      // per non appesantire il caricamento iniziale degli altri tab.
 
       // P59 Sprint 11.2: Gestisci Tariffari - separa attivo da storico
       if (tariffariResponse.status === 'fulfilled' && tariffariResponse.value?.data?.length > 0) {
@@ -585,9 +545,35 @@ const CompanyDetails: React.FC = () => {
     fetchCompanyData();
   }, [id]);
 
+  // Lazy-load dei documenti del tab "Documenti" (giudizi, preventivi, fatture,
+  // allegati 3B): solo all'apertura del tab, in PARALLELO, una volta per azienda.
+  const documentiLoadedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const ctpId = company?.companyTenantProfileId;
+    if (activeTab !== 'documenti' || isOnlyMedico || !ctpId) return;
+    if (documentiLoadedRef.current === ctpId) return;
+    documentiLoadedRef.current = ctpId;
+
+    const headers: Record<string, string> = company?.tenantId ? { 'X-Operate-Tenant-Id': company.tenantId } : {};
+    (async () => {
+      const [giudiziRes, prevRes, fattRes, allRes] = await Promise.allSettled([
+        apiGet<{ data: GiudizioDocItem[] }>(`/api/v1/clinica/giudizi-idoneita?companyTenantProfileId=${ctpId}&limit=200`, {}, { headers }),
+        apiGet<{ data: PreventivoDocItem[] }>(`/api/v1/preventivi?clienteId=${ctpId}&clienteType=azienda&limit=200`, {}, { headers }),
+        apiGet<{ data: FatturaDocItem[] }>(`/api/v1/billing/fatture?clienteAziendaId=${ctpId}&limit=200`, {}, { headers }),
+        apiGet<{ data: Allegato3BDocItem[] }>(`/api/v1/clinica/allegato-3b?companyTenantProfileId=${ctpId}`, {}, { headers }),
+      ]);
+      setGiudizi(giudiziRes.status === 'fulfilled' ? (giudiziRes.value?.data || []) : []);
+      setPreventivi(prevRes.status === 'fulfilled' ? (prevRes.value?.data || []) : []);
+      setFatture(fattRes.status === 'fulfilled' ? (fattRes.value?.data || []) : []);
+      setAllegati3B(allRes.status === 'fulfilled' ? (allRes.value?.data || []) : []);
+    })();
+  }, [activeTab, company?.companyTenantProfileId, isOnlyMedico]);
+
   // Callback per refresh dopo azioni quick panel
   const handleActionComplete = () => {
     fetchCompanyData();
+    // Forza il ricaricamento dei documenti del tab "Documenti" al prossimo accesso
+    documentiLoadedRef.current = null;
     // Invalida anche le query correlate
     queryClient.invalidateQueries({ queryKey: ['company', id] });
     // P59: Forza refresh delle sezioni tariffari e altre
