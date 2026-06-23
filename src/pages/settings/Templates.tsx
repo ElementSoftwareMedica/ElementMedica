@@ -118,14 +118,17 @@ const TEMPLATE_TYPES = [
 
 // Template di sistema (hardcoded): generati dal backend con layout standardizzato,
 // non modificabili dall'editor. Tracciati nella card "Sistemi Template Specializzati".
+type SystemTemplateKind = 'firma' | 'tabella' | 'verbale' | 'standard';
 interface SystemTemplate {
   key: string; label: string; icon: string; format: 'PDF' | 'DOCX'; module: string; description: string;
-  sample: { subtitle: string; rows: [string, string][]; body?: string };
+  color: string; kind: SystemTemplateKind;
+  sample: { subtitle: string; rows: [string, string][]; body?: string; firme?: string[]; sezioni?: string[] };
 }
 const SYSTEM_TEMPLATES: SystemTemplate[] = [
   {
     key: 'giudizio_idoneita', label: 'Giudizio di Idoneità', icon: '⚕️', format: 'PDF', module: 'MDL',
     description: 'Esito sorveglianza sanitaria, copia lavoratore e datore, firma medico competente',
+    color: '#0d9488', kind: 'firma',
     sample: {
       subtitle: 'Giudizio di idoneità alla mansione specifica — Art. 41 D.Lgs 81/08',
       rows: [
@@ -136,11 +139,13 @@ const SYSTEM_TEMPLATES: SystemTemplate[] = [
         ['Giudizio', 'IDONEO con prescrizioni'], ['Prescrizioni', 'Uso lenti correttive'],
         ['Scadenza', '12/03/2027'],
       ],
+      firme: ['Il Medico Competente', 'Il Lavoratore'],
     },
   },
   {
     key: 'nomine', label: 'Nomine Figure Sicurezza', icon: '🛡️', format: 'PDF', module: 'MDL',
     description: 'Nomina MC, RSPP, ASPP e altre figure ex D.Lgs 81/08',
+    color: '#4f46e5', kind: 'firma',
     sample: {
       subtitle: 'Atto di nomina figura della sicurezza — D.Lgs 81/08',
       rows: [
@@ -149,11 +154,13 @@ const SYSTEM_TEMPLATES: SystemTemplate[] = [
         ['Data inizio', '22/06/2026'], ['Riferimento', 'Art. 18 c.1 lett. a)'],
       ],
       body: 'Il datore di lavoro nomina la figura indicata ai sensi del D.Lgs 81/08, che accetta l\'incarico assumendone gli obblighi di legge.',
+      firme: ['Il Datore di Lavoro', 'La Figura Nominata'],
     },
   },
   {
     key: 'verbale_riunione', label: 'Verbale Riunione Periodica', icon: '📄', format: 'DOCX', module: 'MDL',
     description: 'Verbale riunione periodica Art. 35 D.Lgs 81/08 con dati sorveglianza',
+    color: '#475569', kind: 'verbale',
     sample: {
       subtitle: 'Verbale della riunione periodica — Art. 35 D.Lgs 81/08',
       rows: [
@@ -162,18 +169,25 @@ const SYSTEM_TEMPLATES: SystemTemplate[] = [
         ['Visite effettuate', '48'], ['Lavoratori sorvegliati', '45'],
         ['Giudizi di idoneità', '44 idonei, 1 con prescrizioni'],
       ],
-      body: 'Si discutono: andamento sorveglianza sanitaria, valutazione dei rischi, DPI, programmi di formazione e delibere conclusive.',
+      sezioni: [
+        'Andamento della sorveglianza sanitaria nell\'anno',
+        'Esito della valutazione dei rischi e aggiornamenti DVR',
+        'Idoneità dei mezzi di protezione individuale (DPI)',
+        'Programmi di informazione e formazione dei lavoratori',
+        'Delibere e conclusioni della riunione',
+      ],
     },
   },
   {
     key: 'risultati_anonimi', label: 'Risultati Collettivi Anonimi', icon: '📊', format: 'DOCX', module: 'MDL',
     description: 'Dati aggregati e anonimi della sorveglianza sanitaria aziendale',
+    color: '#059669', kind: 'tabella',
     sample: {
       subtitle: 'Risultati anonimi collettivi della sorveglianza sanitaria — Art. 25 D.Lgs 81/08',
       rows: [
-        ['Azienda', 'Acme S.r.l.'], ['Periodo', '01/01/2025 – 31/12/2025'],
         ['Lavoratori esaminati', '45'], ['Idonei', '42'],
-        ['Idonei con prescrizioni', '3'], ['Non idonei', '0'],
+        ['Idonei con prescrizioni', '3'], ['Idonei con limitazioni', '1'],
+        ['Non idonei temporaneamente', '0'], ['Non idonei', '0'],
       ],
       body: 'Dati aggregati e anonimi: nessun riferimento identificativo del singolo lavoratore, nel rispetto della normativa privacy.',
     },
@@ -181,6 +195,7 @@ const SYSTEM_TEMPLATES: SystemTemplate[] = [
   {
     key: 'referto_visita', label: 'Referto Visita Medica', icon: '🩺', format: 'PDF', module: 'Clinica',
     description: 'Referto strutturato della visita medica con esito e prescrizioni',
+    color: '#0891b2', kind: 'standard',
     sample: {
       subtitle: 'Referto di visita medica',
       rows: [
@@ -194,56 +209,90 @@ const SYSTEM_TEMPLATES: SystemTemplate[] = [
   {
     key: 'consenso_firma', label: 'Consenso / Privacy', icon: '✍️', format: 'PDF', module: 'Clinica',
     description: 'Consenso al trattamento dati e prestazioni — firma su tablet',
+    color: '#e11d48', kind: 'firma',
     sample: {
       subtitle: 'Consenso informato e trattamento dati (GDPR)',
       rows: [
         ['Interessato', 'Mario Rossi'], ['Data', '12/03/2026'],
         ['Tipo consenso', 'Trattamento dati sanitari'], ['Finalità', 'Sorveglianza sanitaria'],
       ],
-      body: 'Il sottoscritto dichiara di aver ricevuto l\'informativa e presta il consenso. Firma raccolta digitalmente su tablet.',
+      body: 'Il sottoscritto dichiara di aver ricevuto l\'informativa e presta il consenso al trattamento dei dati per le finalità indicate.',
+      firme: ['L\'Interessato'],
     },
   },
   {
     key: 'tariffario', label: 'Tariffario Aziendale', icon: '💶', format: 'PDF', module: 'MDL',
     description: 'Listino prestazioni MDL, consulenza/sicurezza e spese accessorie',
+    color: '#1d4ed8', kind: 'tabella',
     sample: {
       subtitle: 'Tariffario Medicina del Lavoro e Sicurezza',
       rows: [
-        ['Azienda', 'Acme S.r.l.'], ['Validità', 'dal 01/01/2026'],
-        ['Visita preventiva/periodica', '€ 29,00'], ['Sopralluogo MC', '€ 150,00'],
-        ['Nomina Medico Competente', '€ 200,00 / anno'], ['Uscita MC', '€ 120,00'],
+        ['Visita preventiva / periodica', '€ 29,00'], ['Visita su richiesta', '€ 35,00'],
+        ['Sopralluogo Medico Competente', '€ 150,00'], ['Nomina Medico Competente', '€ 200,00 / anno'],
+        ['Uscita Medico Competente', '€ 120,00'], ['DVR (fascia 0-15 dip.)', '€ 450,00'],
       ],
+      body: 'Prezzi distinti per sezione (Prestazioni MDL · Consulenza e Sicurezza · Spese Accessorie) e per fasce di dipendenti.',
     },
   },
 ];
 
-// Costruisce un'anteprima HTML di esempio (dati fittizi) per un template di sistema
+// Costruisce un'anteprima HTML di esempio (dati fittizi) per un template di sistema,
+// con uno STILE distinto per tipologia (colore brand, blocchi firma, tabelle dati, sezioni).
 const buildSamplePreviewHtml = (tpl: SystemTemplate): string => {
-  const rows = tpl.sample.rows.map(
-    ([l, v]) => `<tr><td class="lbl">${l}</td><td class="val">${v}</td></tr>`
+  const c = tpl.color;
+  const today = new Date().toLocaleDateString('it-IT');
+
+  // §1 Tabella dati — per "tabella" la colonna valore è evidenziata
+  const valueIsAmount = tpl.kind === 'tabella';
+  const rowsHtml = tpl.sample.rows.map(
+    ([l, v]) => `<tr><td class="lbl">${l}</td><td class="val"${valueIsAmount ? ' style="text-align:right;font-weight:700;color:' + c + '"' : ''}>${v}</td></tr>`
   ).join('');
+
+  // §2 Blocchi specifici per tipologia
+  let extra = '';
+  if (tpl.kind === 'verbale' && tpl.sample.sezioni) {
+    extra = `<div class="sezioni"><div class="sez-title">Ordine del giorno</div><ol>${tpl.sample.sezioni.map(s => `<li>${s}</li>`).join('')}</ol></div>`;
+  }
+  if (tpl.sample.body) {
+    extra += `<div class="body">${tpl.sample.body}</div>`;
+  }
+  if (tpl.kind === 'firma' && tpl.sample.firme) {
+    extra += `<div class="firme">${tpl.sample.firme.map(f => `<div class="firma"><div class="firma-line"></div><div class="firma-label">${f}</div></div>`).join('')}</div>`;
+  }
+
   return `<!doctype html><html lang="it"><head><meta charset="utf-8"/>
   <style>
     body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;margin:0;padding:24px;background:#fff;font-size:13px;line-height:1.5;}
     .doc{max-width:720px;margin:0 auto;}
-    .hd{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #0f766e;padding-bottom:10px;margin-bottom:14px;}
-    .hd .logo{font-size:18px;font-weight:800;color:#0f766e;letter-spacing:-.5px;}
+    .hd{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid ${c};padding-bottom:10px;margin-bottom:14px;}
+    .hd .logo{font-size:18px;font-weight:800;color:${c};letter-spacing:-.5px;}
     .hd .meta{font-size:11px;color:#6b7280;text-align:right;}
-    h1{font-size:18px;margin:6px 0 2px;color:#111827;}
-    .sub{color:#6b7280;font-size:12px;margin-bottom:16px;}
+    .title-bar{background:${c};color:#fff;border-radius:8px;padding:8px 14px;margin-bottom:6px;}
+    h1{font-size:16px;margin:0;}
+    .sub{color:#6b7280;font-size:12px;margin:8px 0 16px;}
     table{width:100%;border-collapse:collapse;margin-bottom:14px;}
+    th{background:${c};color:#fff;text-align:left;padding:7px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;}
     td{padding:7px 10px;border-bottom:1px solid #e5e7eb;vertical-align:top;}
-    td.lbl{width:38%;color:#6b7280;font-weight:600;}
+    tr:nth-child(even) td{background:#f8fafc;}
+    td.lbl{width:48%;color:#475569;font-weight:600;}
     td.val{color:#111827;}
-    .body{background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:12px;font-size:12px;color:#374151;}
-    .ft{margin-top:20px;border-top:1px solid #e5e7eb;padding-top:10px;font-size:10px;color:#9ca3af;display:flex;justify-content:space-between;}
-    .badge{display:inline-block;margin-top:6px;padding:2px 8px;border-radius:9999px;background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;}
+    .body{background:#f8fafc;border-left:3px solid ${c};border-radius:6px;padding:12px;font-size:12px;color:#374151;margin-bottom:14px;}
+    .sezioni{margin-bottom:14px;}
+    .sez-title{font-weight:700;color:${c};font-size:12px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;}
+    .sezioni ol{margin:0;padding-left:20px;color:#374151;font-size:12px;}
+    .sezioni li{margin-bottom:4px;}
+    .firme{display:flex;gap:40px;margin-top:34px;}
+    .firma{flex:1;}
+    .firma-line{border-bottom:1px solid #9ca3af;height:34px;}
+    .firma-label{font-size:11px;color:#6b7280;margin-top:4px;text-align:center;}
+    .badge{display:inline-block;margin-top:8px;padding:3px 10px;border-radius:9999px;background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;}
+    .ft{margin-top:22px;border-top:1px solid #e5e7eb;padding-top:10px;font-size:10px;color:#9ca3af;display:flex;justify-content:space-between;}
   </style></head><body><div class="doc">
-    <div class="hd"><span class="logo">${tpl.icon} ElementMedica</span><span class="meta">Documento di esempio<br/>${new Date().toLocaleDateString('it-IT')}</span></div>
-    <h1>${tpl.label}</h1>
+    <div class="hd"><span class="logo">${tpl.icon} ElementMedica</span><span class="meta">Documento di esempio<br/>${today}</span></div>
+    <div class="title-bar"><h1>${tpl.label}</h1></div>
     <div class="sub">${tpl.sample.subtitle}</div>
-    <table>${rows}</table>
-    ${tpl.sample.body ? `<div class="body">${tpl.sample.body}</div>` : ''}
+    <table>${tpl.kind === 'tabella' ? `<thead><tr><th>Voce</th><th style="text-align:right">Valore</th></tr></thead>` : ''}<tbody>${rowsHtml}</tbody></table>
+    ${extra}
     <div class="badge">Anteprima con dati fittizi — template non modificabile (${tpl.format})</div>
     <div class="ft"><span>Template di sistema · modulo ${tpl.module}</span><span>Pag. 1/1</span></div>
   </div></body></html>`;
@@ -673,10 +722,10 @@ const TemplatesSettingsPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Predefiniti: solo template modificabili, massimo 3 righe → colonne = ceil(N / 3) */}
+            {/* Predefiniti: solo template modificabili, compattati su 2 righe → colonne = ceil(N / 2) */}
             <div
               className="grid gap-4"
-              style={{ gridTemplateColumns: `repeat(${Math.ceil(EDITABLE_TYPES.length / 3)}, minmax(0, 1fr))` }}
+              style={{ gridTemplateColumns: `repeat(${Math.ceil(EDITABLE_TYPES.length / 2)}, minmax(0, 1fr))` }}
             >
               {EDITABLE_TYPES.map((type) => {
                 const defaultTemplate = templates.find(t => t.type === type.value && t.isDefault);

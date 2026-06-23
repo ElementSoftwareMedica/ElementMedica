@@ -18,12 +18,20 @@ import { logger } from './logger.js';
  */
 export async function htmlToDocxBuffer(html, title = 'Documento') {
     try {
-        const buffer = await HTMLtoDOCX(html, null, {
+        // html-to-docx gestisce male le immagini (dimensioni errate: o a tutta pagina
+        // o 1px) e i loghi base64 appesantiscono il file. Per un documento di testo
+        // pulito e affidabile rimuoviamo i tag <img>.
+        const cleanHtml = String(html || '').replace(/<img\b[^>]*>/gi, '');
+
+        const buffer = await HTMLtoDOCX(cleanHtml, null, {
             title,
             orientation: 'portrait',
-            margins: { top: 720, right: 720, bottom: 720, left: 720 }, // ~12.7mm (twips)
+            // Tutti i margini DEVONO essere numerici: se header/footer/gutter mancano,
+            // html-to-docx scrive w:header="undefined" → DOCX non apribile da Word.
+            margins: { top: 720, right: 720, bottom: 720, left: 720, header: 0, footer: 0, gutter: 0 },
             table: { row: { cantSplit: true } },
             footer: false,
+            header: false,
             pageNumber: false,
         });
         // html-to-docx può restituire Buffer o Blob a seconda dell'ambiente

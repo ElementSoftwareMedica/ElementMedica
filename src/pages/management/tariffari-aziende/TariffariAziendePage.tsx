@@ -14,7 +14,6 @@ import {
     Building2,
     FileText,
     Calendar,
-    MoreVertical,
     Edit,
     Trash2,
     Copy,
@@ -32,12 +31,7 @@ import { Input } from '../../../design-system/atoms/Input';
 import { Badge } from '../../../design-system/atoms/Badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../design-system/molecules/Card';
 import { Select } from '../../../design-system/atoms/Select';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger
-} from '../../../design-system';
+import { ActionButton } from '../../../components/ui/ActionButton';
 import { useToast } from '../../../hooks/useToast';
 import { CRUDButton } from '../../../components/shared/CRUDButton';
 import { useTenantFilter } from '../../../context/TenantFilterContext';
@@ -360,55 +354,41 @@ const TariffariAziendePage: React.FC = () => {
                                                 )}
                                             </td>
                                             <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                                                <div className="flex items-center justify-end gap-1">
-                                                    {/* Azione rapida: stampa tariffario */}
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        title="Stampa tariffario (PDF)"
-                                                        disabled={printingId === tariffario.id}
-                                                        onClick={() => handlePrint(tariffario)}
-                                                    >
-                                                        {printingId === tariffario.id
-                                                            ? <Loader2 className="h-4 w-4 animate-spin" />
-                                                            : <Printer className="h-4 w-4" />}
-                                                    </Button>
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button variant="ghost" size="sm">
-                                                                <MoreVertical className="h-4 w-4" />
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem
-                                                                onClick={() => navigate(`/poliambulatorio/mdl/tariffari-aziende/${tariffario.id}`)}
-                                                            >
-                                                                <Eye className="h-4 w-4 mr-2" />
-                                                                Visualizza dettaglio
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                onClick={() => navigate(`/poliambulatorio/mdl/tariffari-aziende/${tariffario.id}/modifica`)}
-                                                            >
-                                                                <Edit className="h-4 w-4 mr-2" />
-                                                                Modifica
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => handlePrint(tariffario)}>
-                                                                <Printer className="h-4 w-4 mr-2" />
-                                                                Stampa tariffario
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => handleClone(tariffario)}>
-                                                                <Copy className="h-4 w-4 mr-2" />
-                                                                Clona per azienda
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                className="text-red-600"
-                                                                onClick={() => handleDelete(tariffario)}
-                                                            >
-                                                                <Trash2 className="h-4 w-4 mr-2" />
-                                                                Elimina
-                                                            </DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
+                                                <div className="flex items-center justify-end">
+                                                    <ActionButton
+                                                        theme="teal"
+                                                        actions={[
+                                                            {
+                                                                label: 'Visualizza dettaglio',
+                                                                icon: <Eye className="h-4 w-4" />,
+                                                                onClick: () => navigate(`/poliambulatorio/mdl/tariffari-aziende/${tariffario.id}`),
+                                                            },
+                                                            {
+                                                                label: 'Modifica',
+                                                                icon: <Edit className="h-4 w-4" />,
+                                                                onClick: () => navigate(`/poliambulatorio/mdl/tariffari-aziende/${tariffario.id}/modifica`),
+                                                            },
+                                                            {
+                                                                label: printingId === tariffario.id ? 'Generazione…' : 'Stampa tariffario',
+                                                                icon: printingId === tariffario.id
+                                                                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                                                                    : <Printer className="h-4 w-4" />,
+                                                                disabled: printingId === tariffario.id,
+                                                                onClick: () => handlePrint(tariffario),
+                                                            },
+                                                            {
+                                                                label: 'Clona per azienda',
+                                                                icon: <Copy className="h-4 w-4" />,
+                                                                onClick: () => handleClone(tariffario),
+                                                            },
+                                                            {
+                                                                label: 'Elimina',
+                                                                icon: <Trash2 className="h-4 w-4" />,
+                                                                variant: 'danger',
+                                                                onClick: () => handleDelete(tariffario),
+                                                            },
+                                                        ]}
+                                                    />
                                                 </div>
                                             </td>
                                         </tr>
