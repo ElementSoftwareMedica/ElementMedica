@@ -178,14 +178,20 @@ const submitPublicForm = async (req, res) => {
       });
     }
 
-    // Estrai informazioni base dal formData per compatibilità
+    // Estrai informazioni base dal formData per compatibilità.
+    // Supporta chiavi sia EN che IT e compone nome+cognome quando separati.
+    const fd = formData || {};
+    const firstName = fd.name || fd.nome || fd.firstName || fd.namePersonal || '';
+    const lastName = fd.cognome || fd.lastName || fd.surname || '';
+    const composedName = (fd.fullName || fd.nomeCompleto || `${firstName} ${lastName}`.trim()
+      || fd.companyName || fd.ragioneSociale || 'Utente Anonimo');
     const extractedData = {
-      name: formData.name || formData.firstName || formData.fullName || formData.namePersonal || formData.companyName || 'Utente Anonimo',
-      email: formData.email || formData.emailPersonal || formData.companyEmail || 'noreply@example.com',
-      phone: formData.phone || formData.telefono || formData.phonePersonal || formData.companyPhone || null,
-      company: formData.company || formData.azienda || formData.companyName || null,
-      subject: formData.subject || formData.oggetto || template.name,
-      message: formData.message || formData.messaggio || JSON.stringify(formData)
+      name: composedName,
+      email: fd.email || fd.emailPersonal || fd.mail || fd.companyEmail || 'noreply@example.com',
+      phone: fd.phone || fd.telefono || fd.cellulare || fd.phonePersonal || fd.companyPhone || null,
+      company: fd.company || fd.azienda || fd.companyName || fd.ragioneSociale || null,
+      subject: fd.subject || fd.oggetto || template.name,
+      message: fd.message || fd.messaggio || JSON.stringify(formData)
     };
 
     // Crea la submission in transazione

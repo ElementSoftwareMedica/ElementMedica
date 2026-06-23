@@ -52,6 +52,50 @@ const STATUS_OPTIONS = [
   { value: 'ARCHIVED', label: 'Archiviata' },
 ];
 
+// ─── Risoluzione robusta dei valori dei campi submission ──────────────────────
+// I dati del form sono salvati in submission.formData con chiave = field.name.
+// Per robustezza (varianti di chiave, label, snake/camel, maiuscole) cerchiamo il
+// valore con match normalizzato su formData → metadata → submission.
+const normalizeKey = (k: string) => String(k || '').toLowerCase().replace(/[\s_\-.]+/g, '');
+const lookupByKey = (obj: any, key: string): any => {
+  if (!obj || typeof obj !== 'object' || !key) return undefined;
+  if (obj[key] !== undefined) return obj[key];
+  const target = normalizeKey(key);
+  const found = Object.keys(obj).find(k => normalizeKey(k) === target);
+  return found !== undefined ? obj[found] : undefined;
+};
+const isBlank = (v: any) => v === undefined || v === null || v === '';
+const resolveFieldValue = (submission: any, field: any): any => {
+  if (!submission || !field) return undefined;
+  const fd = submission.formData || {};
+  const md = submission.metadata || {};
+  const candidates = [field.name, field.label, field.id].filter(Boolean);
+  if (field.isStandardField && !isBlank(submission[field.name])) return submission[field.name];
+  for (const key of candidates) { const v = lookupByKey(fd, key); if (!isBlank(v)) return v; }
+  for (const key of candidates) { const v = lookupByKey(md, key); if (!isBlank(v)) return v; }
+  for (const key of candidates) { if (!isBlank(submission[key])) return submission[key]; }
+  return undefined;
+};
+const FALLBACK_NAMES = ['utente anonimo', 'anonimo', 'submission da form', ''];
+const resolveSubmissionName = (submission: any): string => {
+  const n = String(submission?.name || '').trim();
+  if (n && !FALLBACK_NAMES.includes(n.toLowerCase())) return n;
+  const fd = submission?.formData || {};
+  const first = lookupByKey(fd, 'nome') ?? lookupByKey(fd, 'firstName') ?? lookupByKey(fd, 'name') ?? '';
+  const last = lookupByKey(fd, 'cognome') ?? lookupByKey(fd, 'lastName') ?? lookupByKey(fd, 'surname') ?? '';
+  const composed = `${first} ${last}`.trim();
+  if (composed) return composed;
+  const full = lookupByKey(fd, 'nomeCompleto') ?? lookupByKey(fd, 'fullName') ?? lookupByKey(fd, 'ragioneSociale') ?? lookupByKey(fd, 'companyName');
+  return (full && String(full).trim()) || n || 'Anonimo';
+};
+const resolveSubmissionEmail = (submission: any): string => {
+  const e = String(submission?.email || '').trim();
+  if (e && !['noreply@example.com', 'noreply@form.local'].includes(e.toLowerCase())) return e;
+  const fd = submission?.formData || {};
+  const fe = lookupByKey(fd, 'email') ?? lookupByKey(fd, 'mail') ?? lookupByKey(fd, 'emailPersonal') ?? lookupByKey(fd, 'companyEmail');
+  return (fe && String(fe).trim()) || e || '';
+};
+
 // Detail Panel Component
 const DetailPanel: React.FC<{
   submission: ContactSubmission | null;
@@ -88,14 +132,14 @@ const DetailPanel: React.FC<{
               <User className="w-4 h-4" />
               Nome
             </div>
-            <p className="font-medium text-gray-900">{submission.name || 'Anonimo'}</p>
+            <p className="font-medium text-gray-900">{resolveSubmissionName(submission)}</p>
           </div>
           <div className="bg-gray-50 rounded-lg p-4">
             <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
               <Mail className="w-4 h-4" />
               Email
             </div>
-            <p className="font-medium text-gray-900 break-all">{submission.email || 'N/A'}</p>
+            <p className="font-medium text-gray-900 break-all">{resolveSubmissionEmail(submission) || 'N/A'}</p>
           </div>
         </div>
 
@@ -133,10 +177,8 @@ const DetailPanel: React.FC<{
           <div className="space-y-3">
             {fields.length > 0 ? (
               fields.map(field => {
-                // Supporta sia campi standard che formData
-                const value = field.isStandardField
-                  ? (submission as any)[field.name]
-                  : (submission.formData as Record<string, any>)?.[field.name];
+                // Risoluzione robusta del valore (formData/metadata/standard, varianti chiave)
+                const value = resolveFieldValue(submission, field);
                 return (
                   <div key={field.id || field.name} className="bg-gray-50 rounded-lg p-4">
                     <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
@@ -275,8 +317,8 @@ const TemplateSubmissionsPage: React.FC = () => {
       if (filters.status && sub.status !== filters.status) return false;
       if (filters.search) {
         const search = filters.search.toLowerCase();
-        if (!sub.name?.toLowerCase().includes(search) &&
-          !sub.email?.toLowerCase().includes(search) &&
+        if (!resolveSubmissionName(sub).toLowerCase().includes(search) &&
+          !resolveSubmissionEmail(sub).toLowerCase().includes(search) &&
           !sub.subject?.toLowerCase().includes(search)) {
           return false;
         }
@@ -429,8 +471,8 @@ const TemplateSubmissionsPage: React.FC = () => {
       const row: any = {
         'Data': sub.createdAt ? new Date(sub.createdAt).toLocaleString('it-IT') : 'N/A',
         'Stato': STATUS_CONFIG[sub.status]?.label || sub.status,
-        'Nome': sub.name || 'N/A',
-        'Email': sub.email || 'N/A',
+        'Nome': resolveSubmissionName(sub) || 'N/A',
+        'Email': resolveSubmissionEmail(sub) || 'N/A',
         'Telefono': sub.phone || '',
         'Oggetto': sub.subject || ''
       };
@@ -438,9 +480,7 @@ const TemplateSubmissionsPage: React.FC = () => {
       // Aggiungi campi form
       if (fields.length > 0) {
         fields.forEach(field => {
-          const value = field.isStandardField
-            ? (sub as any)[field.name]
-            : (sub.formData as Record<string, any>)?.[field.name];
+          const value = resolveFieldValue(sub, field);
           row[field.label] = formatFieldValue(value);
         });
       } else {
@@ -468,19 +508,9 @@ const TemplateSubmissionsPage: React.FC = () => {
     return String(value);
   };
 
-  // Helper per ottenere il valore di un campo (sia da submission diretta che da formData)
-  const getFieldValue = (submission: ContactSubmission, field: any): any => {
-    // Se è un campo standard (subject, message, phone, company), leggi direttamente dalla submission
-    if (field.isStandardField) {
-      return (submission as any)[field.name];
-    }
-    // Se è un campo da metadata (per contact submissions da public page)
-    if (field.isMetadataField) {
-      return (submission.metadata as Record<string, any>)?.[field.name];
-    }
-    // Altrimenti leggi da formData
-    return (submission.formData as Record<string, any>)?.[field.name];
-  };
+  // Helper per ottenere il valore di un campo (risoluzione robusta condivisa)
+  const getFieldValue = (submission: ContactSubmission, field: any): any =>
+    resolveFieldValue(submission, field);
 
   // Guard: no templateId
   if (!templateId) {
@@ -849,10 +879,10 @@ const TemplateSubmissionsPage: React.FC = () => {
                         }) : 'N/A'}
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-900 font-medium whitespace-nowrap">
-                        {submission.name || <span className="text-gray-400">Anonimo</span>}
+                        {resolveSubmissionName(submission) || <span className="text-gray-400">Anonimo</span>}
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-700 whitespace-nowrap max-w-[200px] truncate">
-                        {submission.email || 'N/A'}
+                        {resolveSubmissionEmail(submission) || 'N/A'}
                       </td>
                       {/* TUTTI i campi del form */}
                       {fields.map(field => {

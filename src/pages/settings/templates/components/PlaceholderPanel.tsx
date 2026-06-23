@@ -374,7 +374,10 @@ export const PlaceholderPanel: React.FC<PlaceholderPanelProps> = ({ onInsert, te
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Persona', 'Corso']));
   const [copiedMarker, setCopiedMarker] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [format, setFormat] = useState<TemplateFormat>(initialFormat || 'html');
+  // Solo formato HTML: l'integrazione Google Docs/Slides è stata rimossa.
+  // Tipo allargato a TemplateFormat così i rami google (ora inattivi) restano validi.
+  const format = 'html' as TemplateFormat;
+  void initialFormat;
 
   const toggleGroup = (category: string) => {
     const newExpanded = new Set(expandedGroups);
@@ -431,30 +434,6 @@ export const PlaceholderPanel: React.FC<PlaceholderPanelProps> = ({ onInsert, te
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold text-gray-900">Segnaposto Disponibili</h3>
           <span className="text-sm text-gray-500">{totalPlaceholders} totali</span>
-        </div>
-
-        {/* Format Toggle */}
-        <div className="flex items-center gap-2 mb-3 p-2 bg-gray-100 rounded-lg">
-          <button
-            onClick={() => setFormat('html')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${format === 'html'
-              ? 'bg-white text-blue-700 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
-              }`}
-          >
-            <FileCode className="w-4 h-4" />
-            HTML
-          </button>
-          <button
-            onClick={() => setFormat('google')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${format === 'google'
-              ? 'bg-white text-green-700 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
-              }`}
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            Google Docs/Slides
-          </button>
         </div>
 
         {/* Search */}
