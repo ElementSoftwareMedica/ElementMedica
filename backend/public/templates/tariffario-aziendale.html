@@ -323,6 +323,13 @@
             text-align: right;
         }
 
+        /* Le colonne numeriche (prezzo/IVA) non devono mai andare a capo:
+           "€ 29.00" deve stare su un'unica riga. */
+        .visita-mdl-table th.right,
+        .visita-mdl-table td.right {
+            white-space: nowrap;
+        }
+
         .visita-mdl-table tr:last-child td {
             border-bottom: none;
         }
@@ -330,6 +337,7 @@
         .visita-mdl-prezzo {
             font-weight: 700;
             color: #7FB3AB;
+            white-space: nowrap;
         }
 
         /* Fasce dipendenti */
@@ -475,10 +483,10 @@
         <table class="visita-mdl-table">
             <thead>
                 <tr>
-                    <th>Visita Medica del Lavoro</th>
-                    <th class="right">Prezzo</th>
-                    <th class="right">IVA</th>
-                    <th class="right">Frequenza</th>
+                    <th style="width:52%">Visita Medica del Lavoro</th>
+                    <th class="right" style="width:18%">Prezzo</th>
+                    <th class="right" style="width:13%">IVA</th>
+                    <th class="right" style="width:17%">Frequenza</th>
                 </tr>
             </thead>
             <tbody>

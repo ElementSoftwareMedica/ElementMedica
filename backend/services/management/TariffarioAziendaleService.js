@@ -1785,7 +1785,12 @@ const TariffarioAziendaleService = {
                         frequenzaLabel: FREQUENZA_LABELS[v.frequenza] || v.frequenza || '-'
                     });
                 }
-                priceMap.get(key).labels.push(CATEGORIA_VISITA_LABELS[v.categoriaVisita] || v.categoriaVisita);
+                const catLabel = CATEGORIA_VISITA_LABELS[v.categoriaVisita] || v.categoriaVisita;
+                // Evita etichette duplicate sulla stessa riga (es. due voci PREVENTIVA
+                // con stesso prezzo → "Preventiva / Preventiva")
+                if (!priceMap.get(key).labels.includes(catLabel)) {
+                    priceMap.get(key).labels.push(catLabel);
+                }
             }
             return [...priceMap.values()].map(r => ({
                 categoriaLabel: r.labels.join(' / '),

@@ -107,7 +107,12 @@ async function getTariffario(companyTenantProfileId, tenantId, referenceDate = n
         },
         include: {
             tariffario: {
-                include: { voci: { where: { attivo: true } } },
+                include: {
+                    voci: {
+                        where: { attivo: true },
+                        include: { fasceDipendenti: { where: { deletedAt: null } } },
+                    },
+                },
             },
         },
         orderBy: { validoDa: 'desc' },
@@ -118,7 +123,12 @@ async function getTariffario(companyTenantProfileId, tenantId, referenceDate = n
         where: baseWhere,
         include: {
             tariffario: {
-                include: { voci: { where: { attivo: true } } },
+                include: {
+                    voci: {
+                        where: { attivo: true },
+                        include: { fasceDipendenti: { where: { deletedAt: null } } },
+                    },
+                },
             },
         },
         orderBy: { validoDa: 'desc' },
@@ -657,6 +667,62 @@ async function _contaDipendentiPeriodo(companyTenantProfileId, tenantId, periodo
             ],
         },
     });
+}
+
+/**
+ * Etichetta leggibile per una fascia dipendenti (es. "6-20" oppure "21+").
+ * @param {{minDipendenti:number, maxDipendenti:number|null}} f
+ * @returns {string}
+ */
+function _labelFascia(f) {
+    return f.maxDipendenti != null ? `${f.minDipendenti}-${f.maxDipendenti}` : `${f.minDipendenti}+`;
+}
+
+/**
+ * Risolve il prezzo applicabile a una voce in funzione del numero di dipendenti.
+ *
+ * - Se la voce NON usa le fasce dipendenti → ritorna prezzoBase (la moltiplicazione
+ *   per dipendenti/sedi resta a carico del chiamante secondo unitaCalcolo).
+ * - Se la voce USA le fasce (scaglioni) → individua la fascia che contiene
+ *   numDipendenti e ritorna il suo prezzo come importo "flat" della voce per
+ *   quell'azienda (NON va moltiplicato per il numero di dipendenti: la fascia
+ *   rappresenta già il prezzo totale per quella dimensione aziendale).
+ *
+ * Fallback robusti se nessuna fascia copre esattamente il valore:
+ *  - numDipendenti sotto la fascia minima → usa la fascia più bassa
+ *  - numDipendenti sopra la fascia massima (senza fascia aperta) → usa la più alta
+ *  - nessuna fascia configurata → prezzoBase
+ *
+ * @param {Object} voce - VoceTariffario con eventuale fasceDipendenti[]
+ * @param {number} numDipendenti
+ * @returns {{ prezzo:number, fascia:Object|null, usaFasce:boolean }}
+ */
+function risolviPrezzoVoce(voce, numDipendenti) {
+    const prezzoBase = parseFloat(voce.prezzoBase) || 0;
+    const fasce = Array.isArray(voce.fasceDipendenti)
+        ? voce.fasceDipendenti.filter(f => !f.deletedAt)
+        : [];
+
+    if (!voce.usaFasceDipendenti || fasce.length === 0) {
+        return { prezzo: prezzoBase, fascia: null, usaFasce: false };
+    }
+
+    const n = Math.max(Number(numDipendenti) || 0, 0);
+    const ordinate = [...fasce].sort((a, b) => a.minDipendenti - b.minDipendenti);
+
+    // Match esatto: min <= n <= max (max null = fascia aperta verso l'alto)
+    const match = ordinate.find(f =>
+        n >= f.minDipendenti && (f.maxDipendenti == null || n <= f.maxDipendenti)
+    );
+    if (match) {
+        return { prezzo: parseFloat(match.prezzo) || 0, fascia: match, usaFasce: true };
+    }
+
+    // Fallback: sotto la più bassa → prima fascia; sopra la più alta → ultima fascia
+    const fallback = n < ordinate[0].minDipendenti
+        ? ordinate[0]
+        : ordinate[ordinate.length - 1];
+    return { prezzo: parseFloat(fallback.prezzo) || 0, fascia: fallback, usaFasce: true };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1705,19 +1771,33 @@ const MovimentoContabileGenerator = {
                     const periodoFine = _finePeriodo(scadenza, voce.frequenza); // null per UNA_TANTUM
                     const countEnd = periodoFine || now;
 
-                    // Moltiplicatore in base all'unità di calcolo
+                    // Conteggio dipendenti del periodo: serve sia per le fasce (scaglioni)
+                    // sia per il moltiplicatore PER_DIPENDENTE. Conta tutti i dipendenti in
+                    // forza durante il periodo (assunti e/o cessati nel periodo).
+                    const needsDip = voce.usaFasceDipendenti || voce.unitaCalcolo === 'PER_DIPENDENTE';
+                    const nDip = needsDip
+                        ? await _contaDipendentiPeriodo(companyTenantProfileId, tenantId, periodoInizio, countEnd)
+                        : 0;
+
+                    // Prezzo unitario e moltiplicatore.
+                    //  - Fasce dipendenti (scaglioni): il prezzo della fascia che contiene i
+                    //    dipendenti è già il totale per l'azienda → moltiplicatore = 1.
+                    //  - Altrimenti: prezzoBase × (dipendenti | sedi) secondo unitaCalcolo.
+                    const { prezzo: prezzoUnitario, fascia, usaFasce } = risolviPrezzoVoce(voce, Math.max(nDip, 1));
                     let molt = 1;
-                    if (voce.unitaCalcolo === 'PER_DIPENDENTE') {
-                        // Tutti i dipendenti in forza durante il periodo (assunti e/o cessati nel periodo)
-                        const nDip = await _contaDipendentiPeriodo(companyTenantProfileId, tenantId, periodoInizio, countEnd);
+                    let moltLabel = '';
+                    if (usaFasce) {
+                        moltLabel = fascia ? ` (fascia ${_labelFascia(fascia)} dip. — ${nDip} in forza)` : '';
+                    } else if (voce.unitaCalcolo === 'PER_DIPENDENTE') {
                         molt = Math.max(nDip, 1);
+                        moltLabel = molt > 1 ? ` × ${molt}` : '';
                     } else if (voce.unitaCalcolo === 'PER_SEDE') {
                         molt = Math.max(nSedi, 1);
+                        moltLabel = molt > 1 ? ` × ${molt}` : '';
                     }
 
-                    const prezzoBase = parseFloat(voce.prezzoBase);
                     const aliquotaIva = parseFloat(voce.ivaAliquota || 22);
-                    const { importoNetto, importoIva, importoLordo } = calcolaImporti(prezzoBase * molt, aliquotaIva);
+                    const { importoNetto, importoIva, importoLordo } = calcolaImporti(prezzoUnitario * molt, aliquotaIva);
 
                     // Descrizione arricchita con periodo
                     const annoScadenza = scadenza.getFullYear();
@@ -1725,7 +1805,7 @@ const MovimentoContabileGenerator = {
                     const periodoLabel = voce.frequenza === 'ANNUALE'
                         ? `Anno ${annoScadenza}`
                         : `${meseScadenza} ${annoScadenza}`;
-                    const descrizione = `${voce.nome || voce.tipo} – ${periodoLabel}${molt > 1 ? ` × ${molt}` : ''}`;
+                    const descrizione = `${voce.nome || voce.tipo} – ${periodoLabel}${moltLabel}`;
 
                     // Movimento già esistente per questa voce in questo periodo?
                     const existingWhere = {
@@ -1747,7 +1827,11 @@ const MovimentoContabileGenerator = {
                         const adeguabile = existingP.fatturaElettronicaId == null
                             && ['BOZZA', 'CONFERMATO', 'DA_FATTURARE'].includes(existingP.stato);
                         const importoCambiato = Number(existingP.importoNetto) !== importoNetto;
-                        if (voce.unitaCalcolo === 'PER_DIPENDENTE' && adeguabile && importoCambiato) {
+                        // Riallinea l'importo se il numero di dipendenti è cambiato nel periodo:
+                        // sia per le voci PER_DIPENDENTE sia per quelle a fasce/scaglioni
+                        // (es. l'azienda supera la soglia di una fascia → cambia il prezzo).
+                        const dipendenteSensibile = voce.usaFasceDipendenti || voce.unitaCalcolo === 'PER_DIPENDENTE';
+                        if (dipendenteSensibile && adeguabile && importoCambiato) {
                             const aggiornato = await prisma.movimentoContabile.update({
                                 where: { id: existingP.id, deletedAt: null },
                                 data: { importoNetto, importoIva, importoLordo, aliquotaIva, descrizione, updatedAt: new Date() },
@@ -2275,7 +2359,17 @@ const MovimentoContabileGenerator = {
                 }
             }
 
+            // Se la voce usa le fasce dipendenti (scaglioni), il prezzo è quello della
+            // fascia in cui ricade l'azienda alla data dell'uscita; altrimenti prezzoBase.
             let prezzoNetto = voce ? parseFloat(voce.prezzoBase) : 0;
+            let fasciaSuffix = '';
+            if (voce?.usaFasceDipendenti) {
+                const dataRif = new Date(uscitaMC.data);
+                const nDip = await _contaDipendentiPeriodo(uscitaMC.companyTenantProfileId, tenantId, dataRif, dataRif);
+                const { prezzo, fascia } = risolviPrezzoVoce(voce, Math.max(nDip, 1));
+                prezzoNetto = prezzo;
+                if (fascia) fasciaSuffix = ` (fascia ${_labelFascia(fascia)} dip. — ${nDip} in forza)`;
+            }
             if (!prezzoNetto) {
                 result.warnings.push({
                     type: 'MISSING_PREZZO',
@@ -2291,7 +2385,7 @@ const MovimentoContabileGenerator = {
             const dataLabel = new Date(uscitaMC.data).toLocaleDateString('it-IT');
             const medicoSuffix = medicoNome ? ` – ${medicoNome}` : '';
             const descrizioneEntrata = uscitaMC.voceTariffarioId
-                ? `${voceLabel} – ${dataLabel}${medicoSuffix}`
+                ? `${voceLabel} – ${dataLabel}${medicoSuffix}${fasciaSuffix}`
                 : `Uscita MC – ${dataLabel}${medicoSuffix}`;
 
             const movEntrata = await prisma.movimentoContabile.create({
