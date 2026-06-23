@@ -114,6 +114,18 @@ const TEMPLATE_TYPES = [
   },
 ];
 
+// Template di sistema (hardcoded): generati dal backend con layout standardizzato,
+// non modificabili dall'editor. Tracciati nella card "Sistemi Template Specializzati".
+const SYSTEM_TEMPLATES: { key: string; label: string; icon: string; format: 'PDF' | 'DOCX'; module: string; description: string }[] = [
+  { key: 'giudizio_idoneita', label: 'Giudizio di Idoneità', icon: '⚕️', format: 'PDF', module: 'MDL', description: 'Esito sorveglianza sanitaria, copia lavoratore e datore, firma medico competente' },
+  { key: 'nomine', label: 'Nomine Figure Sicurezza', icon: '🛡️', format: 'PDF', module: 'MDL', description: 'Nomina MC, RSPP, ASPP e altre figure ex D.Lgs 81/08' },
+  { key: 'verbale_riunione', label: 'Verbale Riunione Periodica', icon: '📄', format: 'DOCX', module: 'MDL', description: 'Verbale riunione periodica Art. 35 D.Lgs 81/08 con dati sorveglianza' },
+  { key: 'risultati_anonimi', label: 'Risultati Collettivi Anonimi', icon: '📊', format: 'DOCX', module: 'MDL', description: 'Dati aggregati e anonimi della sorveglianza sanitaria aziendale' },
+  { key: 'referto_visita', label: 'Referto Visita Medica', icon: '🩺', format: 'PDF', module: 'Clinica', description: 'Referto strutturato della visita medica con esito e prescrizioni' },
+  { key: 'consenso_firma', label: 'Consenso / Privacy', icon: '✍️', format: 'PDF', module: 'Clinica', description: 'Consenso al trattamento dati e prestazioni — firma su tablet' },
+  { key: 'tariffario', label: 'Tariffario Aziendale', icon: '💶', format: 'PDF', module: 'MDL', description: 'Listino prestazioni MDL, consulenza/sicurezza e spese accessorie' },
+];
+
 // Helper per ottenere i placeholder disponibili per tipo
 const getPlaceholdersForType = (type: string): string[] => {
   const placeholders: Record<string, string[]> = {
@@ -674,6 +686,40 @@ const TemplatesSettingsPage: React.FC = () => {
                 </div>
                 <p className="text-xs text-gray-400">Test formativi, valutazioni corsi, formulari personalizzati compilabili</p>
               </button>
+
+              {/* --- TEMPLATE DI SISTEMA (hardcoded, non modificabili) --- */}
+              <div className="col-span-full text-xs font-semibold uppercase tracking-wider text-gray-400 pb-1 border-b border-gray-100 mt-3">
+                Template di sistema — standard, non modificabili
+              </div>
+              <p className="col-span-full text-xs text-gray-400 -mt-1 mb-1">
+                Documenti generati automaticamente dal sistema con layout standardizzato. Tracciati qui per riferimento.
+              </p>
+
+              {SYSTEM_TEMPLATES.map((tpl) => (
+                <div
+                  key={tpl.key}
+                  className="text-left p-4 rounded-xl border border-gray-200 bg-gray-50/40"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xl flex-shrink-0">{tpl.icon}</span>
+                      <span className="font-medium text-sm text-gray-800 truncate">{tpl.label}</span>
+                    </div>
+                    <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold ${tpl.format === 'DOCX' ? 'bg-sky-100 text-sky-700' : 'bg-rose-100 text-rose-700'}`}>
+                      {tpl.format}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400">{tpl.description}</p>
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-200 text-gray-600">
+                      {tpl.module}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[10px] text-gray-400">
+                      <Shield className="w-3 h-3" /> Standard
+                    </span>
+                  </div>
+                </div>
+              ))}
 
             </div>
           </div>

@@ -22,7 +22,10 @@ import {
     XCircle,
     ChevronLeft,
     ChevronRight,
-    ClipboardList
+    ClipboardList,
+    Printer,
+    Eye,
+    Loader2
 } from 'lucide-react';
 import { Button } from '../../../design-system/atoms/Button';
 import { Input } from '../../../design-system/atoms/Input';
@@ -141,6 +144,20 @@ const TariffariAziendePage: React.FC = () => {
         } catch (error: unknown) {
             const msg = 'Errore durante la clonazione';
             showToast({ message: msg, type: 'error' });
+        }
+    };
+
+    // Stampa / scarica il PDF del tariffario
+    const [printingId, setPrintingId] = useState<string | null>(null);
+    const handlePrint = async (tariffario: TariffarioAziendaleListItem) => {
+        try {
+            setPrintingId(tariffario.id);
+            await tariffariAziendaliApi.downloadPDF(tariffario.id, getTenantFilterParams());
+            showToast({ message: 'PDF generato correttamente', type: 'success' });
+        } catch {
+            showToast({ message: 'Errore nella generazione del PDF', type: 'error' });
+        } finally {
+            setPrintingId(null);
         }
     };
 
@@ -343,32 +360,56 @@ const TariffariAziendePage: React.FC = () => {
                                                 )}
                                             </td>
                                             <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" size="sm">
-                                                            <MoreVertical className="h-4 w-4" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem
-                                                            onClick={() => navigate(`/poliambulatorio/mdl/tariffari-aziende/${tariffario.id}`)}
-                                                        >
-                                                            <Edit className="h-4 w-4 mr-2" />
-                                                            Modifica
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => handleClone(tariffario)}>
-                                                            <Copy className="h-4 w-4 mr-2" />
-                                                            Clona per azienda
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                            className="text-red-600"
-                                                            onClick={() => handleDelete(tariffario)}
-                                                        >
-                                                            <Trash2 className="h-4 w-4 mr-2" />
-                                                            Elimina
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {/* Azione rapida: stampa tariffario */}
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        title="Stampa tariffario (PDF)"
+                                                        disabled={printingId === tariffario.id}
+                                                        onClick={() => handlePrint(tariffario)}
+                                                    >
+                                                        {printingId === tariffario.id
+                                                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                                                            : <Printer className="h-4 w-4" />}
+                                                    </Button>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="ghost" size="sm">
+                                                                <MoreVertical className="h-4 w-4" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem
+                                                                onClick={() => navigate(`/poliambulatorio/mdl/tariffari-aziende/${tariffario.id}`)}
+                                                            >
+                                                                <Eye className="h-4 w-4 mr-2" />
+                                                                Visualizza dettaglio
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem
+                                                                onClick={() => navigate(`/poliambulatorio/mdl/tariffari-aziende/${tariffario.id}/modifica`)}
+                                                            >
+                                                                <Edit className="h-4 w-4 mr-2" />
+                                                                Modifica
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => handlePrint(tariffario)}>
+                                                                <Printer className="h-4 w-4 mr-2" />
+                                                                Stampa tariffario
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => handleClone(tariffario)}>
+                                                                <Copy className="h-4 w-4 mr-2" />
+                                                                Clona per azienda
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem
+                                                                className="text-red-600"
+                                                                onClick={() => handleDelete(tariffario)}
+                                                            >
+                                                                <Trash2 className="h-4 w-4 mr-2" />
+                                                                Elimina
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}

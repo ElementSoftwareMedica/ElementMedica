@@ -1080,7 +1080,6 @@ const GIUDIZIO_IDONEITA_MDL_CONTENT = `<!DOCTYPE html>
                 <div class="info-row"><span class="info-label">Tipo visita</span><span class="info-value">{{visita.tipo}}</span></div>
                 <div class="info-row"><span class="info-label">Medico Competente</span><span class="info-value"><strong>{{medico.nomeCompleto}}</strong></span></div>
                 {{#if medico.albo}}<div class="info-row"><span class="info-label">N° Iscrizione OMCeO</span><span class="info-value">{{medico.albo}}</span></div>{{/if}}
-                {{#if ambulatorio.nome}}<div class="info-row"><span class="info-label">Ambulatorio</span><span class="info-value">{{ambulatorio.nome}}</span></div>{{/if}}
             </div>
         </div>
     </div>
