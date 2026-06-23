@@ -26,6 +26,8 @@ import {
   Stethoscope,
   LayoutTemplate,
   ExternalLink,
+  Eye,
+  X,
 } from 'lucide-react';
 
 interface Template {
@@ -116,15 +118,145 @@ const TEMPLATE_TYPES = [
 
 // Template di sistema (hardcoded): generati dal backend con layout standardizzato,
 // non modificabili dall'editor. Tracciati nella card "Sistemi Template Specializzati".
-const SYSTEM_TEMPLATES: { key: string; label: string; icon: string; format: 'PDF' | 'DOCX'; module: string; description: string }[] = [
-  { key: 'giudizio_idoneita', label: 'Giudizio di Idoneità', icon: '⚕️', format: 'PDF', module: 'MDL', description: 'Esito sorveglianza sanitaria, copia lavoratore e datore, firma medico competente' },
-  { key: 'nomine', label: 'Nomine Figure Sicurezza', icon: '🛡️', format: 'PDF', module: 'MDL', description: 'Nomina MC, RSPP, ASPP e altre figure ex D.Lgs 81/08' },
-  { key: 'verbale_riunione', label: 'Verbale Riunione Periodica', icon: '📄', format: 'DOCX', module: 'MDL', description: 'Verbale riunione periodica Art. 35 D.Lgs 81/08 con dati sorveglianza' },
-  { key: 'risultati_anonimi', label: 'Risultati Collettivi Anonimi', icon: '📊', format: 'DOCX', module: 'MDL', description: 'Dati aggregati e anonimi della sorveglianza sanitaria aziendale' },
-  { key: 'referto_visita', label: 'Referto Visita Medica', icon: '🩺', format: 'PDF', module: 'Clinica', description: 'Referto strutturato della visita medica con esito e prescrizioni' },
-  { key: 'consenso_firma', label: 'Consenso / Privacy', icon: '✍️', format: 'PDF', module: 'Clinica', description: 'Consenso al trattamento dati e prestazioni — firma su tablet' },
-  { key: 'tariffario', label: 'Tariffario Aziendale', icon: '💶', format: 'PDF', module: 'MDL', description: 'Listino prestazioni MDL, consulenza/sicurezza e spese accessorie' },
+interface SystemTemplate {
+  key: string; label: string; icon: string; format: 'PDF' | 'DOCX'; module: string; description: string;
+  sample: { subtitle: string; rows: [string, string][]; body?: string };
+}
+const SYSTEM_TEMPLATES: SystemTemplate[] = [
+  {
+    key: 'giudizio_idoneita', label: 'Giudizio di Idoneità', icon: '⚕️', format: 'PDF', module: 'MDL',
+    description: 'Esito sorveglianza sanitaria, copia lavoratore e datore, firma medico competente',
+    sample: {
+      subtitle: 'Giudizio di idoneità alla mansione specifica — Art. 41 D.Lgs 81/08',
+      rows: [
+        ['Lavoratore', 'Mario Rossi'], ['Codice fiscale', 'RSSMRA80A01F205X'],
+        ['Azienda', 'Acme S.r.l.'], ['Mansione', 'Addetto magazzino'],
+        ['Data visita', '12/03/2026'], ['Tipo visita', 'Periodica'],
+        ['Medico Competente', 'Dott.ssa Bianchi Laura'],
+        ['Giudizio', 'IDONEO con prescrizioni'], ['Prescrizioni', 'Uso lenti correttive'],
+        ['Scadenza', '12/03/2027'],
+      ],
+    },
+  },
+  {
+    key: 'nomine', label: 'Nomine Figure Sicurezza', icon: '🛡️', format: 'PDF', module: 'MDL',
+    description: 'Nomina MC, RSPP, ASPP e altre figure ex D.Lgs 81/08',
+    sample: {
+      subtitle: 'Atto di nomina figura della sicurezza — D.Lgs 81/08',
+      rows: [
+        ['Azienda', 'Acme S.r.l.'], ['Datore di lavoro', 'Giuseppe Verdi'],
+        ['Figura nominata', 'Medico Competente'], ['Nominativo', 'Dott.ssa Bianchi Laura'],
+        ['Data inizio', '22/06/2026'], ['Riferimento', 'Art. 18 c.1 lett. a)'],
+      ],
+      body: 'Il datore di lavoro nomina la figura indicata ai sensi del D.Lgs 81/08, che accetta l\'incarico assumendone gli obblighi di legge.',
+    },
+  },
+  {
+    key: 'verbale_riunione', label: 'Verbale Riunione Periodica', icon: '📄', format: 'DOCX', module: 'MDL',
+    description: 'Verbale riunione periodica Art. 35 D.Lgs 81/08 con dati sorveglianza',
+    sample: {
+      subtitle: 'Verbale della riunione periodica — Art. 35 D.Lgs 81/08',
+      rows: [
+        ['Azienda', 'Acme S.r.l.'], ['Anno di riferimento', '2026'],
+        ['Partecipanti', 'Datore di lavoro, RSPP, Medico Competente, RLS'],
+        ['Visite effettuate', '48'], ['Lavoratori sorvegliati', '45'],
+        ['Giudizi di idoneità', '44 idonei, 1 con prescrizioni'],
+      ],
+      body: 'Si discutono: andamento sorveglianza sanitaria, valutazione dei rischi, DPI, programmi di formazione e delibere conclusive.',
+    },
+  },
+  {
+    key: 'risultati_anonimi', label: 'Risultati Collettivi Anonimi', icon: '📊', format: 'DOCX', module: 'MDL',
+    description: 'Dati aggregati e anonimi della sorveglianza sanitaria aziendale',
+    sample: {
+      subtitle: 'Risultati anonimi collettivi della sorveglianza sanitaria — Art. 25 D.Lgs 81/08',
+      rows: [
+        ['Azienda', 'Acme S.r.l.'], ['Periodo', '01/01/2025 – 31/12/2025'],
+        ['Lavoratori esaminati', '45'], ['Idonei', '42'],
+        ['Idonei con prescrizioni', '3'], ['Non idonei', '0'],
+      ],
+      body: 'Dati aggregati e anonimi: nessun riferimento identificativo del singolo lavoratore, nel rispetto della normativa privacy.',
+    },
+  },
+  {
+    key: 'referto_visita', label: 'Referto Visita Medica', icon: '🩺', format: 'PDF', module: 'Clinica',
+    description: 'Referto strutturato della visita medica con esito e prescrizioni',
+    sample: {
+      subtitle: 'Referto di visita medica',
+      rows: [
+        ['Paziente', 'Mario Rossi'], ['Data', '12/03/2026'],
+        ['Prestazione', 'Visita di Medicina del Lavoro'], ['Medico', 'Dott.ssa Bianchi Laura'],
+        ['Pressione', '120/80 mmHg'], ['Esito', 'Nella norma'],
+      ],
+      body: 'Anamnesi, esame obiettivo, conclusioni e prescrizioni del medico.',
+    },
+  },
+  {
+    key: 'consenso_firma', label: 'Consenso / Privacy', icon: '✍️', format: 'PDF', module: 'Clinica',
+    description: 'Consenso al trattamento dati e prestazioni — firma su tablet',
+    sample: {
+      subtitle: 'Consenso informato e trattamento dati (GDPR)',
+      rows: [
+        ['Interessato', 'Mario Rossi'], ['Data', '12/03/2026'],
+        ['Tipo consenso', 'Trattamento dati sanitari'], ['Finalità', 'Sorveglianza sanitaria'],
+      ],
+      body: 'Il sottoscritto dichiara di aver ricevuto l\'informativa e presta il consenso. Firma raccolta digitalmente su tablet.',
+    },
+  },
+  {
+    key: 'tariffario', label: 'Tariffario Aziendale', icon: '💶', format: 'PDF', module: 'MDL',
+    description: 'Listino prestazioni MDL, consulenza/sicurezza e spese accessorie',
+    sample: {
+      subtitle: 'Tariffario Medicina del Lavoro e Sicurezza',
+      rows: [
+        ['Azienda', 'Acme S.r.l.'], ['Validità', 'dal 01/01/2026'],
+        ['Visita preventiva/periodica', '€ 29,00'], ['Sopralluogo MC', '€ 150,00'],
+        ['Nomina Medico Competente', '€ 200,00 / anno'], ['Uscita MC', '€ 120,00'],
+      ],
+    },
+  },
 ];
+
+// Costruisce un'anteprima HTML di esempio (dati fittizi) per un template di sistema
+const buildSamplePreviewHtml = (tpl: SystemTemplate): string => {
+  const rows = tpl.sample.rows.map(
+    ([l, v]) => `<tr><td class="lbl">${l}</td><td class="val">${v}</td></tr>`
+  ).join('');
+  return `<!doctype html><html lang="it"><head><meta charset="utf-8"/>
+  <style>
+    body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;margin:0;padding:24px;background:#fff;font-size:13px;line-height:1.5;}
+    .doc{max-width:720px;margin:0 auto;}
+    .hd{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #0f766e;padding-bottom:10px;margin-bottom:14px;}
+    .hd .logo{font-size:18px;font-weight:800;color:#0f766e;letter-spacing:-.5px;}
+    .hd .meta{font-size:11px;color:#6b7280;text-align:right;}
+    h1{font-size:18px;margin:6px 0 2px;color:#111827;}
+    .sub{color:#6b7280;font-size:12px;margin-bottom:16px;}
+    table{width:100%;border-collapse:collapse;margin-bottom:14px;}
+    td{padding:7px 10px;border-bottom:1px solid #e5e7eb;vertical-align:top;}
+    td.lbl{width:38%;color:#6b7280;font-weight:600;}
+    td.val{color:#111827;}
+    .body{background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:12px;font-size:12px;color:#374151;}
+    .ft{margin-top:20px;border-top:1px solid #e5e7eb;padding-top:10px;font-size:10px;color:#9ca3af;display:flex;justify-content:space-between;}
+    .badge{display:inline-block;margin-top:6px;padding:2px 8px;border-radius:9999px;background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;}
+  </style></head><body><div class="doc">
+    <div class="hd"><span class="logo">${tpl.icon} ElementMedica</span><span class="meta">Documento di esempio<br/>${new Date().toLocaleDateString('it-IT')}</span></div>
+    <h1>${tpl.label}</h1>
+    <div class="sub">${tpl.sample.subtitle}</div>
+    <table>${rows}</table>
+    ${tpl.sample.body ? `<div class="body">${tpl.sample.body}</div>` : ''}
+    <div class="badge">Anteprima con dati fittizi — template non modificabile (${tpl.format})</div>
+    <div class="ft"><span>Template di sistema · modulo ${tpl.module}</span><span>Pag. 1/1</span></div>
+  </div></body></html>`;
+};
+
+// Tipi di template realmente modificabili dall'editor (document builder).
+// Gli altri (VISITA_MEDICA, VERBALE_RIUNIONE, GIUDIZIO_IDONEITA) sono generati
+// dal sistema con layout standard e sono tracciati tra i "Template di sistema".
+const EDITABLE_TEMPLATE_TYPES = new Set([
+  'CERTIFICATE', 'LETTER_OF_ENGAGEMENT', 'ATTENDANCE_REGISTER',
+  'COURSE_PROGRAM', 'PREVENTIVO', 'INVOICE',
+]);
+const EDITABLE_TYPES = TEMPLATE_TYPES.filter(t => EDITABLE_TEMPLATE_TYPES.has(t.value));
 
 // Helper per ottenere i placeholder disponibili per tipo
 const getPlaceholdersForType = (type: string): string[] => {
@@ -229,6 +361,7 @@ const TemplatesSettingsPage: React.FC = () => {
 
   // Create template modal
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [previewSystemTpl, setPreviewSystemTpl] = useState<SystemTemplate | null>(null);
   const [newTemplate, setNewTemplate] = useState({
     name: '',
     type: 'CERTIFICATE',
@@ -540,12 +673,12 @@ const TemplatesSettingsPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Predefiniti: massimo 3 righe → colonne = ceil(N / 3) */}
+            {/* Predefiniti: solo template modificabili, massimo 3 righe → colonne = ceil(N / 3) */}
             <div
               className="grid gap-4"
-              style={{ gridTemplateColumns: `repeat(${Math.ceil(TEMPLATE_TYPES.length / 3)}, minmax(0, 1fr))` }}
+              style={{ gridTemplateColumns: `repeat(${Math.ceil(EDITABLE_TYPES.length / 3)}, minmax(0, 1fr))` }}
             >
-              {TEMPLATE_TYPES.map((type) => {
+              {EDITABLE_TYPES.map((type) => {
                 const defaultTemplate = templates.find(t => t.type === type.value && t.isDefault);
                 const typeTemplates = templates.filter(t => t.type === type.value);
 
@@ -696,14 +829,16 @@ const TemplatesSettingsPage: React.FC = () => {
               </p>
 
               {SYSTEM_TEMPLATES.map((tpl) => (
-                <div
+                <button
                   key={tpl.key}
-                  className="text-left p-4 rounded-xl border border-gray-200 bg-gray-50/40"
+                  type="button"
+                  onClick={() => setPreviewSystemTpl(tpl)}
+                  className="group text-left p-4 rounded-xl border border-gray-200 bg-gray-50/40 hover:border-violet-400 hover:bg-violet-50/40 transition-all"
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xl flex-shrink-0">{tpl.icon}</span>
-                      <span className="font-medium text-sm text-gray-800 truncate">{tpl.label}</span>
+                      <span className="font-medium text-sm text-gray-800 truncate group-hover:text-violet-700">{tpl.label}</span>
                     </div>
                     <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold ${tpl.format === 'DOCX' ? 'bg-sky-100 text-sky-700' : 'bg-rose-100 text-rose-700'}`}>
                       {tpl.format}
@@ -717,8 +852,11 @@ const TemplatesSettingsPage: React.FC = () => {
                     <span className="inline-flex items-center gap-1 text-[10px] text-gray-400">
                       <Shield className="w-3 h-3" /> Standard
                     </span>
+                    <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-medium text-violet-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Eye className="w-3 h-3" /> Anteprima
+                    </span>
                   </div>
-                </div>
+                </button>
               ))}
 
             </div>
@@ -947,6 +1085,44 @@ const TemplatesSettingsPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Anteprima Template di Sistema (dati fittizi) */}
+          {previewSystemTpl && (
+            <div
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+              onClick={() => setPreviewSystemTpl(null)}
+            >
+              <div
+                className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[92vh] flex flex-col overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xl">{previewSystemTpl.icon}</span>
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-gray-900 truncate">{previewSystemTpl.label}</h3>
+                      <p className="text-xs text-gray-500">Template di sistema · {previewSystemTpl.module} · {previewSystemTpl.format} · non modificabile</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setPreviewSystemTpl(null)}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
+                    title="Chiudi"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-auto bg-gray-100 p-4">
+                  <iframe
+                    title={`Anteprima ${previewSystemTpl.label}`}
+                    srcDoc={buildSamplePreviewHtml(previewSystemTpl)}
+                    className="w-full bg-white rounded-lg shadow-sm border border-gray-200"
+                    style={{ height: '70vh' }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Create Template Modal */}
           {showCreateModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -974,7 +1150,7 @@ const TemplatesSettingsPage: React.FC = () => {
                       Tipo Template
                     </label>
                     <div className="grid grid-cols-2 gap-2">
-                      {TEMPLATE_TYPES.map(type => (
+                      {EDITABLE_TYPES.map(type => (
                         <label
                           key={type.value}
                           className={`flex items-center p-3 border-2 rounded-lg cursor-pointer transition-all ${newTemplate.type === type.value
