@@ -26,8 +26,6 @@ import {
   Stethoscope,
   LayoutTemplate,
   ExternalLink,
-  Eye,
-  X,
 } from 'lucide-react';
 
 interface Template {
@@ -118,189 +116,19 @@ const TEMPLATE_TYPES = [
 
 // Template di sistema (hardcoded): generati dal backend con layout standardizzato,
 // non modificabili dall'editor. Tracciati nella card "Sistemi Template Specializzati".
-type SystemTemplateKind = 'firma' | 'tabella' | 'verbale' | 'standard';
-interface SystemTemplate {
-  key: string; label: string; icon: string; format: 'PDF' | 'DOCX'; module: string; description: string;
-  color: string; kind: SystemTemplateKind;
-  sample: { subtitle: string; rows: [string, string][]; body?: string; firme?: string[]; sezioni?: string[] };
-}
-const SYSTEM_TEMPLATES: SystemTemplate[] = [
-  {
-    key: 'giudizio_idoneita', label: 'Giudizio di Idoneità', icon: '⚕️', format: 'PDF', module: 'MDL',
-    description: 'Esito sorveglianza sanitaria, copia lavoratore e datore, firma medico competente',
-    color: '#0d9488', kind: 'firma',
-    sample: {
-      subtitle: 'Giudizio di idoneità alla mansione specifica — Art. 41 D.Lgs 81/08',
-      rows: [
-        ['Lavoratore', 'Mario Rossi'], ['Codice fiscale', 'RSSMRA80A01F205X'],
-        ['Azienda', 'Acme S.r.l.'], ['Mansione', 'Addetto magazzino'],
-        ['Data visita', '12/03/2026'], ['Tipo visita', 'Periodica'],
-        ['Medico Competente', 'Dott.ssa Bianchi Laura'],
-        ['Giudizio', 'IDONEO con prescrizioni'], ['Prescrizioni', 'Uso lenti correttive'],
-        ['Scadenza', '12/03/2027'],
-      ],
-      firme: ['Il Medico Competente', 'Il Lavoratore'],
-    },
-  },
-  {
-    key: 'nomine', label: 'Nomine Figure Sicurezza', icon: '🛡️', format: 'PDF', module: 'MDL',
-    description: 'Nomina MC, RSPP, ASPP e altre figure ex D.Lgs 81/08',
-    color: '#4f46e5', kind: 'firma',
-    sample: {
-      subtitle: 'Atto di nomina figura della sicurezza — D.Lgs 81/08',
-      rows: [
-        ['Azienda', 'Acme S.r.l.'], ['Datore di lavoro', 'Giuseppe Verdi'],
-        ['Figura nominata', 'Medico Competente'], ['Nominativo', 'Dott.ssa Bianchi Laura'],
-        ['Data inizio', '22/06/2026'], ['Riferimento', 'Art. 18 c.1 lett. a)'],
-      ],
-      body: 'Il datore di lavoro nomina la figura indicata ai sensi del D.Lgs 81/08, che accetta l\'incarico assumendone gli obblighi di legge.',
-      firme: ['Il Datore di Lavoro', 'La Figura Nominata'],
-    },
-  },
-  {
-    key: 'verbale_riunione', label: 'Verbale Riunione Periodica', icon: '📄', format: 'DOCX', module: 'MDL',
-    description: 'Verbale riunione periodica Art. 35 D.Lgs 81/08 con dati sorveglianza',
-    color: '#475569', kind: 'verbale',
-    sample: {
-      subtitle: 'Verbale della riunione periodica — Art. 35 D.Lgs 81/08',
-      rows: [
-        ['Azienda', 'Acme S.r.l.'], ['Anno di riferimento', '2026'],
-        ['Partecipanti', 'Datore di lavoro, RSPP, Medico Competente, RLS'],
-        ['Visite effettuate', '48'], ['Lavoratori sorvegliati', '45'],
-        ['Giudizi di idoneità', '44 idonei, 1 con prescrizioni'],
-      ],
-      sezioni: [
-        'Andamento della sorveglianza sanitaria nell\'anno',
-        'Esito della valutazione dei rischi e aggiornamenti DVR',
-        'Idoneità dei mezzi di protezione individuale (DPI)',
-        'Programmi di informazione e formazione dei lavoratori',
-        'Delibere e conclusioni della riunione',
-      ],
-    },
-  },
-  {
-    key: 'risultati_anonimi', label: 'Risultati Collettivi Anonimi', icon: '📊', format: 'DOCX', module: 'MDL',
-    description: 'Dati aggregati e anonimi della sorveglianza sanitaria aziendale',
-    color: '#059669', kind: 'tabella',
-    sample: {
-      subtitle: 'Risultati anonimi collettivi della sorveglianza sanitaria — Art. 25 D.Lgs 81/08',
-      rows: [
-        ['Lavoratori esaminati', '45'], ['Idonei', '42'],
-        ['Idonei con prescrizioni', '3'], ['Idonei con limitazioni', '1'],
-        ['Non idonei temporaneamente', '0'], ['Non idonei', '0'],
-      ],
-      body: 'Dati aggregati e anonimi: nessun riferimento identificativo del singolo lavoratore, nel rispetto della normativa privacy.',
-    },
-  },
-  {
-    key: 'referto_visita', label: 'Referto Visita Medica', icon: '🩺', format: 'PDF', module: 'Clinica',
-    description: 'Referto strutturato della visita medica con esito e prescrizioni',
-    color: '#0891b2', kind: 'standard',
-    sample: {
-      subtitle: 'Referto di visita medica',
-      rows: [
-        ['Paziente', 'Mario Rossi'], ['Data', '12/03/2026'],
-        ['Prestazione', 'Visita di Medicina del Lavoro'], ['Medico', 'Dott.ssa Bianchi Laura'],
-        ['Pressione', '120/80 mmHg'], ['Esito', 'Nella norma'],
-      ],
-      body: 'Anamnesi, esame obiettivo, conclusioni e prescrizioni del medico.',
-    },
-  },
-  {
-    key: 'consenso_firma', label: 'Consenso / Privacy', icon: '✍️', format: 'PDF', module: 'Clinica',
-    description: 'Consenso al trattamento dati e prestazioni — firma su tablet',
-    color: '#e11d48', kind: 'firma',
-    sample: {
-      subtitle: 'Consenso informato e trattamento dati (GDPR)',
-      rows: [
-        ['Interessato', 'Mario Rossi'], ['Data', '12/03/2026'],
-        ['Tipo consenso', 'Trattamento dati sanitari'], ['Finalità', 'Sorveglianza sanitaria'],
-      ],
-      body: 'Il sottoscritto dichiara di aver ricevuto l\'informativa e presta il consenso al trattamento dei dati per le finalità indicate.',
-      firme: ['L\'Interessato'],
-    },
-  },
-  {
-    key: 'tariffario', label: 'Tariffario Aziendale', icon: '💶', format: 'PDF', module: 'MDL',
-    description: 'Listino prestazioni MDL, consulenza/sicurezza e spese accessorie',
-    color: '#1d4ed8', kind: 'tabella',
-    sample: {
-      subtitle: 'Tariffario Medicina del Lavoro e Sicurezza',
-      rows: [
-        ['Visita preventiva / periodica', '€ 29,00'], ['Visita su richiesta', '€ 35,00'],
-        ['Sopralluogo Medico Competente', '€ 150,00'], ['Nomina Medico Competente', '€ 200,00 / anno'],
-        ['Uscita Medico Competente', '€ 120,00'], ['DVR (fascia 0-15 dip.)', '€ 450,00'],
-      ],
-      body: 'Prezzi distinti per sezione (Prestazioni MDL · Consulenza e Sicurezza · Spese Accessorie) e per fasce di dipendenti.',
-    },
-  },
+const SYSTEM_TEMPLATES: { key: string; label: string; icon: string; format: 'PDF' | 'DOCX'; module: string; description: string }[] = [
+  { key: 'giudizio_idoneita', label: 'Giudizio di Idoneità', icon: '⚕️', format: 'PDF', module: 'MDL', description: 'Esito sorveglianza sanitaria, copia lavoratore e datore, firma medico competente' },
+  { key: 'nomine', label: 'Nomine Figure Sicurezza', icon: '🛡️', format: 'PDF', module: 'MDL', description: 'Nomina MC, RSPP, ASPP e altre figure ex D.Lgs 81/08' },
+  { key: 'verbale_riunione', label: 'Verbale Riunione Periodica', icon: '📄', format: 'DOCX', module: 'MDL', description: 'Verbale riunione periodica Art. 35 D.Lgs 81/08 con dati sorveglianza' },
+  { key: 'risultati_anonimi', label: 'Risultati Collettivi Anonimi', icon: '📊', format: 'DOCX', module: 'MDL', description: 'Dati aggregati e anonimi della sorveglianza sanitaria aziendale' },
+  { key: 'referto_visita', label: 'Referto Visita Medica', icon: '🩺', format: 'PDF', module: 'Clinica', description: 'Referto strutturato della visita medica con esito e prescrizioni' },
+  { key: 'consenso_firma', label: 'Consenso / Privacy', icon: '✍️', format: 'PDF', module: 'Clinica', description: 'Consenso al trattamento dati e prestazioni — firma su tablet' },
+  { key: 'tariffario', label: 'Tariffario Aziendale', icon: '💶', format: 'PDF', module: 'MDL', description: 'Listino prestazioni MDL, consulenza/sicurezza e spese accessorie' },
 ];
 
-// Costruisce un'anteprima HTML di esempio (dati fittizi) per un template di sistema,
-// con uno STILE distinto per tipologia (colore brand, blocchi firma, tabelle dati, sezioni).
-const buildSamplePreviewHtml = (tpl: SystemTemplate): string => {
-  const c = tpl.color;
-  const today = new Date().toLocaleDateString('it-IT');
-
-  // §1 Tabella dati — per "tabella" la colonna valore è evidenziata
-  const valueIsAmount = tpl.kind === 'tabella';
-  const rowsHtml = tpl.sample.rows.map(
-    ([l, v]) => `<tr><td class="lbl">${l}</td><td class="val"${valueIsAmount ? ' style="text-align:right;font-weight:700;color:' + c + '"' : ''}>${v}</td></tr>`
-  ).join('');
-
-  // §2 Blocchi specifici per tipologia
-  let extra = '';
-  if (tpl.kind === 'verbale' && tpl.sample.sezioni) {
-    extra = `<div class="sezioni"><div class="sez-title">Ordine del giorno</div><ol>${tpl.sample.sezioni.map(s => `<li>${s}</li>`).join('')}</ol></div>`;
-  }
-  if (tpl.sample.body) {
-    extra += `<div class="body">${tpl.sample.body}</div>`;
-  }
-  if (tpl.kind === 'firma' && tpl.sample.firme) {
-    extra += `<div class="firme">${tpl.sample.firme.map(f => `<div class="firma"><div class="firma-line"></div><div class="firma-label">${f}</div></div>`).join('')}</div>`;
-  }
-
-  return `<!doctype html><html lang="it"><head><meta charset="utf-8"/>
-  <style>
-    body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;margin:0;padding:24px;background:#fff;font-size:13px;line-height:1.5;}
-    .doc{max-width:720px;margin:0 auto;}
-    .hd{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid ${c};padding-bottom:10px;margin-bottom:14px;}
-    .hd .logo{font-size:18px;font-weight:800;color:${c};letter-spacing:-.5px;}
-    .hd .meta{font-size:11px;color:#6b7280;text-align:right;}
-    .title-bar{background:${c};color:#fff;border-radius:8px;padding:8px 14px;margin-bottom:6px;}
-    h1{font-size:16px;margin:0;}
-    .sub{color:#6b7280;font-size:12px;margin:8px 0 16px;}
-    table{width:100%;border-collapse:collapse;margin-bottom:14px;}
-    th{background:${c};color:#fff;text-align:left;padding:7px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;}
-    td{padding:7px 10px;border-bottom:1px solid #e5e7eb;vertical-align:top;}
-    tr:nth-child(even) td{background:#f8fafc;}
-    td.lbl{width:48%;color:#475569;font-weight:600;}
-    td.val{color:#111827;}
-    .body{background:#f8fafc;border-left:3px solid ${c};border-radius:6px;padding:12px;font-size:12px;color:#374151;margin-bottom:14px;}
-    .sezioni{margin-bottom:14px;}
-    .sez-title{font-weight:700;color:${c};font-size:12px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;}
-    .sezioni ol{margin:0;padding-left:20px;color:#374151;font-size:12px;}
-    .sezioni li{margin-bottom:4px;}
-    .firme{display:flex;gap:40px;margin-top:34px;}
-    .firma{flex:1;}
-    .firma-line{border-bottom:1px solid #9ca3af;height:34px;}
-    .firma-label{font-size:11px;color:#6b7280;margin-top:4px;text-align:center;}
-    .badge{display:inline-block;margin-top:8px;padding:3px 10px;border-radius:9999px;background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;}
-    .ft{margin-top:22px;border-top:1px solid #e5e7eb;padding-top:10px;font-size:10px;color:#9ca3af;display:flex;justify-content:space-between;}
-  </style></head><body><div class="doc">
-    <div class="hd"><span class="logo">${tpl.icon} ElementMedica</span><span class="meta">Documento di esempio<br/>${today}</span></div>
-    <div class="title-bar"><h1>${tpl.label}</h1></div>
-    <div class="sub">${tpl.sample.subtitle}</div>
-    <table>${tpl.kind === 'tabella' ? `<thead><tr><th>Voce</th><th style="text-align:right">Valore</th></tr></thead>` : ''}<tbody>${rowsHtml}</tbody></table>
-    ${extra}
-    <div class="badge">Anteprima con dati fittizi — template non modificabile (${tpl.format})</div>
-    <div class="ft"><span>Template di sistema · modulo ${tpl.module}</span><span>Pag. 1/1</span></div>
-  </div></body></html>`;
-};
-
 // Tipi di template realmente modificabili dall'editor (document builder).
-// Gli altri (VISITA_MEDICA, VERBALE_RIUNIONE, GIUDIZIO_IDONEITA) sono generati
-// dal sistema con layout standard e sono tracciati tra i "Template di sistema".
+// Gli altri sono generati dal sistema con layout standard e sono tracciati
+// tra i "Template di sistema".
 const EDITABLE_TEMPLATE_TYPES = new Set([
   'CERTIFICATE', 'LETTER_OF_ENGAGEMENT', 'ATTENDANCE_REGISTER',
   'COURSE_PROGRAM', 'PREVENTIVO', 'INVOICE',
@@ -410,7 +238,6 @@ const TemplatesSettingsPage: React.FC = () => {
 
   // Create template modal
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [previewSystemTpl, setPreviewSystemTpl] = useState<SystemTemplate | null>(null);
   const [newTemplate, setNewTemplate] = useState({
     name: '',
     type: 'CERTIFICATE',
@@ -878,16 +705,14 @@ const TemplatesSettingsPage: React.FC = () => {
               </p>
 
               {SYSTEM_TEMPLATES.map((tpl) => (
-                <button
+                <div
                   key={tpl.key}
-                  type="button"
-                  onClick={() => setPreviewSystemTpl(tpl)}
-                  className="group text-left p-4 rounded-xl border border-gray-200 bg-gray-50/40 hover:border-violet-400 hover:bg-violet-50/40 transition-all"
+                  className="text-left p-4 rounded-xl border border-gray-200 bg-gray-50/40"
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xl flex-shrink-0">{tpl.icon}</span>
-                      <span className="font-medium text-sm text-gray-800 truncate group-hover:text-violet-700">{tpl.label}</span>
+                      <span className="font-medium text-sm text-gray-800 truncate">{tpl.label}</span>
                     </div>
                     <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold ${tpl.format === 'DOCX' ? 'bg-sky-100 text-sky-700' : 'bg-rose-100 text-rose-700'}`}>
                       {tpl.format}
@@ -901,11 +726,8 @@ const TemplatesSettingsPage: React.FC = () => {
                     <span className="inline-flex items-center gap-1 text-[10px] text-gray-400">
                       <Shield className="w-3 h-3" /> Standard
                     </span>
-                    <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-medium text-violet-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Eye className="w-3 h-3" /> Anteprima
-                    </span>
                   </div>
-                </button>
+                </div>
               ))}
 
             </div>
@@ -1133,44 +955,6 @@ const TemplatesSettingsPage: React.FC = () => {
               )}
             </div>
           </div>
-
-          {/* Anteprima Template di Sistema (dati fittizi) */}
-          {previewSystemTpl && (
-            <div
-              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-              onClick={() => setPreviewSystemTpl(null)}
-            >
-              <div
-                className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[92vh] flex flex-col overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xl">{previewSystemTpl.icon}</span>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-gray-900 truncate">{previewSystemTpl.label}</h3>
-                      <p className="text-xs text-gray-500">Template di sistema · {previewSystemTpl.module} · {previewSystemTpl.format} · non modificabile</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setPreviewSystemTpl(null)}
-                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
-                    title="Chiudi"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-auto bg-gray-100 p-4">
-                  <iframe
-                    title={`Anteprima ${previewSystemTpl.label}`}
-                    srcDoc={buildSamplePreviewHtml(previewSystemTpl)}
-                    className="w-full bg-white rounded-lg shadow-sm border border-gray-200"
-                    style={{ height: '70vh' }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Create Template Modal */}
           {showCreateModal && (

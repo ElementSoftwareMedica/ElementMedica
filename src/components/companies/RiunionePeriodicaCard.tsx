@@ -28,10 +28,12 @@ import {
     Upload,
     ChevronDown,
     ChevronUp,
+    Trash2,
+    FileType2,
 } from 'lucide-react';
 import { cn } from '../../design-system/utils';
 import { useToast } from '../../hooks/useToast';
-import { apiGet, apiDownload, apiPost, apiUpload } from '../../services/api';
+import { apiGet, apiDownload, apiPost, apiUpload, apiDelete } from '../../services/api';
 import SigningWorkflowModal from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
 import type { SignaturePlacement } from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
 
@@ -229,7 +231,7 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
         setQueriedYear(selectedYear);
     };
 
-    const handleDownloadPdf = async () => {
+    const handleDownloadDocx = async () => {
         setIsDownloading(true);
         try {
             const blob = await apiDownload(
@@ -253,9 +255,52 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
         }
     };
 
+    // PDF elegante (con grafici) — formato alternativo al DOCX
+    const handleDownloadPdf = async () => {
+        setIsDownloading(true);
+        try {
+            const blob = await apiDownload(
+                `/api/v1/companies/${companyTenantProfileId}/riunione-periodica/pdf?anno=${queriedYear}&delibereConclusioni=${encodeURIComponent(delibereConclusioni)}&format=pdf`
+            );
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `verbale-riunione-periodica-${queriedYear}-${companyName.replace(/\s+/g, '-')}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            await refetchDocumenti();
+            showToast({ type: 'success', message: 'PDF scaricato con successo' });
+        } catch {
+            showToast({ type: 'error', message: 'Errore nel download del PDF' });
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
+    // Quick-look = download (i DOCX non sono visualizzabili inline nel browser)
     const handleOpenDocument = async (file: MdlDocumentFile) => {
         const blob = await apiDownload(file.url);
-        window.open(URL.createObjectURL(blob), '_blank', 'noopener,noreferrer');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.originalName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
+    const handleDeleteDocument = async (file: MdlDocumentFile) => {
+        if (!window.confirm(`Eliminare il documento "${file.originalName}"?`)) return;
+        try {
+            await apiDelete(`/api/v1/companies/${companyTenantProfileId}/mdl-documents/riunione-periodica/files/${file.filename}`);
+            await refetchDocumenti();
+            showToast({ type: 'success', message: 'Documento eliminato' });
+        } catch {
+            showToast({ type: 'error', message: 'Errore nell\'eliminazione del documento' });
+        }
     };
 
     const handleUploadFirmato = async () => {
@@ -443,17 +488,28 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
                                         Periodo: {data.periodo.da} — {data.periodo.a}
                                     </span>
                                 </div>
-                                <button
-                                    onClick={handleDownloadPdf}
-                                    disabled={isDownloading || ss.totaleVisite === 0}
-                                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors disabled:opacity-50"
-                                >
-                                    {isDownloading
-                                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                                        : <Download className="h-4 w-4" />
-                                    }
-                                    Scarica DOCX
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={handleDownloadDocx}
+                                        disabled={isDownloading || ss.totaleVisite === 0}
+                                        className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors disabled:opacity-50"
+                                    >
+                                        {isDownloading
+                                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                                            : <FileType2 className="h-4 w-4" />
+                                        }
+                                        Scarica DOCX
+                                    </button>
+                                    <button
+                                        onClick={handleDownloadPdf}
+                                        disabled={isDownloading || ss.totaleVisite === 0}
+                                        className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-rose-700 border border-rose-200 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50 dark:text-rose-400 dark:border-rose-700 dark:hover:bg-rose-900/30"
+                                        title="PDF elegante con grafici"
+                                    >
+                                        <Download className="h-4 w-4" />
+                                        Scarica PDF
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
@@ -661,7 +717,7 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
                                             <div className="flex items-center gap-2">
                                                 <input
                                                     type="file"
-                                                    accept="application/pdf,image/jpeg,image/png"
+                                                    accept="application/pdf,image/jpeg,image/png,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                                                     onChange={(event) => setUploadFile(event.target.files?.[0] || null)}
                                                     className="max-w-[210px] text-xs text-gray-500 file:mr-2 file:rounded-md file:border-0 file:bg-gray-100 file:px-2 file:py-1 file:text-xs file:font-semibold"
                                                 />
@@ -704,6 +760,9 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
                                                             URL.revokeObjectURL(url);
                                                         })} className="rounded-md p-1.5 text-teal-600 hover:bg-teal-50" title="Download">
                                                             <Download className="h-3.5 w-3.5" />
+                                                        </button>
+                                                        <button type="button" onClick={() => handleDeleteDocument(file)} className="rounded-md p-1.5 text-red-600 hover:bg-red-50" title="Elimina">
+                                                            <Trash2 className="h-3.5 w-3.5" />
                                                         </button>
                                                     </div>
                                                 </div>
@@ -787,7 +846,7 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
                                                     <Upload className="h-3.5 w-3.5" />
                                                     <input
                                                         type="file"
-                                                        accept="application/pdf,image/jpeg,image/png"
+                                                        accept="application/pdf,image/jpeg,image/png,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                                                         className="hidden"
                                                         disabled={isUploading}
                                                         onChange={(event) => {
@@ -797,6 +856,9 @@ export const RiunionePeriodicaCard: React.FC<RiunionePeriodicaCardProps> = ({
                                                         }}
                                                     />
                                                 </label>
+                                                <button type="button" onClick={() => handleDeleteDocument(file)} className="rounded-md p-1.5 text-red-600 hover:bg-red-50" title="Elimina">
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
                                             </div>
                                         </div>
                                     ))}

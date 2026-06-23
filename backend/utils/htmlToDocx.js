@@ -18,10 +18,14 @@ import { logger } from './logger.js';
  */
 export async function htmlToDocxBuffer(html, title = 'Documento') {
     try {
-        // html-to-docx gestisce male le immagini (dimensioni errate: o a tutta pagina
-        // o 1px) e i loghi base64 appesantiscono il file. Per un documento di testo
-        // pulito e affidabile rimuoviamo i tag <img>.
-        const cleanHtml = String(html || '').replace(/<img\b[^>]*>/gi, '');
+        // html-to-docx gestisce male immagini/grafici (dimensioni errate, SVG non
+        // supportati). Per un documento di testo pulito rimuoviamo img, svg, canvas e
+        // script: tabelle e testo restano. La versione "elegante" con grafici resta il PDF.
+        const cleanHtml = String(html || '')
+            .replace(/<img\b[^>]*>/gi, '')
+            .replace(/<svg\b[\s\S]*?<\/svg>/gi, '')
+            .replace(/<canvas\b[\s\S]*?<\/canvas>/gi, '')
+            .replace(/<script\b[\s\S]*?<\/script>/gi, '');
 
         const buffer = await HTMLtoDOCX(cleanHtml, null, {
             title,

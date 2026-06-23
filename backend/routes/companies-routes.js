@@ -994,12 +994,62 @@ router.get('/:id/mdl-documents/:documentType/files/:filename',
   }
 );
 
+// Elimina un documento MDL caricato/generato
+router.delete('/:id/mdl-documents/:documentType/files/:filename',
+  authenticateToken,
+  checkAdvancedPermission('companies', 'update'),
+  async (req, res) => {
+    try {
+      const tenantId = getEffectiveTenantId(req);
+      const documentType = safeDocumentType(req.params.documentType);
+      if (!documentType) return res.status(400).json({ success: false, error: 'Tipologia documento non valida' });
+
+      const profile = await resolveCompanyTenantProfile(req.params.id, tenantId);
+      if (!profile) return res.status(404).json({ success: false, error: 'Azienda non trovata' });
+
+      const dir = ensureMdlDocumentDir(tenantId, profile.id, documentType);
+      const filePath = path.resolve(dir, sanitizeStoredFilename(req.params.filename));
+      if (!filePath.startsWith(dir + path.sep) || !fs.existsSync(filePath)) {
+        return res.status(404).json({ success: false, error: 'Documento non trovato' });
+      }
+
+      let metadata = {};
+      try { metadata = JSON.parse(fs.readFileSync(`${filePath}.json`, 'utf8')); } catch { metadata = {}; }
+
+      fs.unlinkSync(filePath);
+      if (fs.existsSync(`${filePath}.json`)) fs.unlinkSync(`${filePath}.json`);
+
+      await logCompanyMdlDocumentAudit(req, {
+        tenantId,
+        action: 'DELETE',
+        profileId: profile.id,
+        documentType,
+        filename: path.basename(filePath),
+        originalName: metadata.originalName || path.basename(filePath),
+        sha256: metadata.sha256 || null,
+        sourceSha256: metadata.sourceSha256 || null,
+        scanStatus: metadata.scanStatus || null
+      });
+
+      return res.json({ success: true, data: listMdlDocumentFiles(tenantId, profile.id, documentType) });
+    } catch (error) {
+      logger.error({ error: error.message, companyOrProfileId: req.params.id }, 'Errore eliminazione documento MDL azienda');
+      return res.status(500).json({ success: false, error: 'Errore nell\'eliminazione del documento' });
+    }
+  }
+);
+
 router.post('/:id/mdl-documents/:documentType/upload',
   authenticateToken,
   checkAdvancedPermission('companies', 'update'),
   createSingleUpload('documento', {
     destination: 'uploads/company-mdl-temp',
-    allowedMimeTypes: ['application/pdf', 'image/jpeg', 'image/png'],
+    // PDF, immagini e documenti Word (i documenti DOCX scaricati e ri-firmati)
+    allowedMimeTypes: [
+      'application/pdf', 'image/jpeg', 'image/png',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+      'application/msword', // .doc
+    ],
     maxFileSize: 25 * 1024 * 1024
   }),
   multerErrorHandler,

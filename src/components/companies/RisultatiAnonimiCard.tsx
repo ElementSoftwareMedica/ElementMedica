@@ -31,11 +31,13 @@ import {
     Activity,
     Upload,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    Trash2,
+    FileType2
 } from 'lucide-react';
 import { cn } from '../../design-system/utils';
 import { useToast } from '../../hooks/useToast';
-import { apiGet, apiDownload, apiPost, apiUpload } from '../../services/api';
+import { apiGet, apiDownload, apiPost, apiUpload, apiDelete } from '../../services/api';
 import SigningWorkflowModal from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
 import type { SignaturePlacement } from '../schedules/components/DocumentManager/components/SigningWorkflowModal';
 import { DatePickerElegante } from '../ui/DatePickerElegante';
@@ -203,7 +205,7 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
         setQueriedTo(dateTo);
     };
 
-    const handleGeneraPdf = async () => {
+    const handleGeneraDocx = async () => {
         if (!stats || !queriedFrom || !queriedTo) return;
         setIsGeneratingPdf(true);
         try {
@@ -228,9 +230,54 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
         }
     };
 
-    const handleOpenDocument = async (file: MdlDocumentFile) => {
+    // Quick-look = download del file (i DOCX non sono visualizzabili inline nel browser)
+    const downloadFile = async (file: MdlDocumentFile) => {
         const blob = await apiDownload(file.url);
-        window.open(URL.createObjectURL(blob), '_blank', 'noopener,noreferrer');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.originalName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+    const handleOpenDocument = downloadFile;
+
+    const handleDeleteDocument = async (file: MdlDocumentFile) => {
+        if (!window.confirm(`Eliminare il documento "${file.originalName}"?`)) return;
+        try {
+            await apiDelete(`/api/v1/companies/${companyTenantProfileId}/mdl-documents/risultati-anonimi/files/${file.filename}`);
+            await refetchDocumenti();
+            showToast({ type: 'success', message: 'Documento eliminato' });
+        } catch {
+            showToast({ type: 'error', message: 'Errore nell\'eliminazione del documento' });
+        }
+    };
+
+    // Scarica il PDF elegante (con grafici) — formato alternativo al DOCX
+    const handleGeneraPdf = async () => {
+        if (!stats || !queriedFrom || !queriedTo) return;
+        setIsGeneratingPdf(true);
+        try {
+            const blob = await apiDownload(
+                `/api/v1/companies/${companyTenantProfileId}/risultati-anonimi/pdf?dateFrom=${queriedFrom}&dateTo=${queriedTo}&format=pdf`
+            );
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `risultati-anonimi-${companyName.replace(/\s+/g, '-')}-${queriedFrom}-${queriedTo}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            await refetchDocumenti();
+            showToast({ type: 'success', message: 'PDF generato con successo' });
+        } catch {
+            showToast({ type: 'error', message: 'Errore nella generazione del PDF' });
+        } finally {
+            setIsGeneratingPdf(false);
+        }
     };
 
     const handleUploadFirmato = async () => {
@@ -439,17 +486,28 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
                                         Periodo: {formatDateLabel(stats.periodo.da)} — {formatDateLabel(stats.periodo.a)}
                                     </span>
                                 </div>
-                                <button
-                                    onClick={handleGeneraPdf}
-                                    disabled={isGeneratingPdf || stats.totaleVisite === 0}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-teal-700 border border-teal-200 rounded-lg hover:bg-teal-50 dark:text-teal-400 dark:border-teal-700 dark:hover:bg-teal-900/30 transition-colors disabled:opacity-50"
-                                >
-                                    {isGeneratingPdf
-                                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        : <Download className="h-3.5 w-3.5" />
-                                    }
-                                    Esporta DOCX
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={handleGeneraDocx}
+                                        disabled={isGeneratingPdf || stats.totaleVisite === 0}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-teal-700 border border-teal-200 rounded-lg hover:bg-teal-50 dark:text-teal-400 dark:border-teal-700 dark:hover:bg-teal-900/30 transition-colors disabled:opacity-50"
+                                    >
+                                        {isGeneratingPdf
+                                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            : <FileType2 className="h-3.5 w-3.5" />
+                                        }
+                                        Esporta DOCX
+                                    </button>
+                                    <button
+                                        onClick={handleGeneraPdf}
+                                        disabled={isGeneratingPdf || stats.totaleVisite === 0}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-rose-700 border border-rose-200 rounded-lg hover:bg-rose-50 dark:text-rose-400 dark:border-rose-700 dark:hover:bg-rose-900/30 transition-colors disabled:opacity-50"
+                                        title="PDF elegante con grafici"
+                                    >
+                                        <Download className="h-3.5 w-3.5" />
+                                        Esporta PDF
+                                    </button>
+                                </div>
                             </div>
 
                             {stats.totaleVisite === 0 ? (
@@ -689,7 +747,7 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
                                             <div className="flex items-center gap-2">
                                                 <input
                                                     type="file"
-                                                    accept="application/pdf,image/jpeg,image/png"
+                                                    accept="application/pdf,image/jpeg,image/png,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                                                     onChange={(event) => setUploadFile(event.target.files?.[0] || null)}
                                                     className="max-w-[210px] text-xs text-gray-500 file:mr-2 file:rounded-md file:border-0 file:bg-gray-100 file:px-2 file:py-1 file:text-xs file:font-semibold"
                                                 />
@@ -732,6 +790,9 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
                                                             URL.revokeObjectURL(url);
                                                         })} className="rounded-md p-1.5 text-teal-600 hover:bg-teal-50" title="Download">
                                                             <Download className="h-3.5 w-3.5" />
+                                                        </button>
+                                                        <button type="button" onClick={() => handleDeleteDocument(file)} className="rounded-md p-1.5 text-red-600 hover:bg-red-50" title="Elimina">
+                                                            <Trash2 className="h-3.5 w-3.5" />
                                                         </button>
                                                     </div>
                                                 </div>
@@ -815,7 +876,7 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
                                                     <Upload className="h-3.5 w-3.5" />
                                                     <input
                                                         type="file"
-                                                        accept="application/pdf,image/jpeg,image/png"
+                                                        accept="application/pdf,image/jpeg,image/png,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                                                         className="hidden"
                                                         disabled={isUploading}
                                                         onChange={(event) => {
@@ -825,6 +886,9 @@ export const RisultatiAnonimiCard: React.FC<RisultatiAnonimiCardProps> = ({
                                                         }}
                                                     />
                                                 </label>
+                                                <button type="button" onClick={() => handleDeleteDocument(file)} className="rounded-md p-1.5 text-red-600 hover:bg-red-50" title="Elimina">
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
                                             </div>
                                         </div>
                                     ))}
