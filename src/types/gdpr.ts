@@ -289,8 +289,21 @@ export interface PrivacySettingsFormData {
 }
 
 // Hook Return Types
+/** Modulo consenso (vocabolario unico tablet ↔ /gdpr). consentType === codice */
+export interface ConsentModule {
+  codice: string;
+  titolo: string;
+  sottotitolo?: string | null;
+  obbligatorio?: boolean;
+  ordine?: number;
+  validitaGiorni?: number | null;
+  isDefault?: boolean;
+}
+
 export interface UseGDPRConsentReturn {
   consents: GDPRConsent[];
+  modules: ConsentModule[];
+  modulesLoading: boolean;
   loading: boolean;
   error: string | null;
   grantConsent: (data: ConsentFormData) => Promise<void>;

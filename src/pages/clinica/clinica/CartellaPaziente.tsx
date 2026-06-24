@@ -71,6 +71,7 @@ import { formatDate, formatTime } from '../../../utils/dateUtils';
 import { formatMedicoName } from '../../../utils/textFormatters';
 import { ConsentFSEForm, ConsentFSESummary } from '../../../components/clinica/consent-fse';
 import ConsentiTabletFirmati from './components/ConsentiTabletFirmati';
+import ConsensiPazienteUnificati from './components/ConsensiPazienteUnificati';
 import { useBillingAccess } from '../../../hooks/useBillingAccess';
 import { useRoleGuard } from '../../../hooks/useRoleGuard';
 import QuickFatturazioneTab from '../../finance/billing/components/QuickFatturazioneTab';
@@ -1870,6 +1871,7 @@ export const CartellaPaziente: React.FC = () => {
                                     personName={`${paziente.lastName || paziente.cognome} ${paziente.firstName || paziente.nome}`}
                                 />
                                 <ConsentiTabletFirmati pazienteId={id} />
+                                <ConsensiPazienteUnificati personId={id} />
                             </div>
                         )}
                         {hasBillingFeature && activeTab === 'fatturazione' && id && (

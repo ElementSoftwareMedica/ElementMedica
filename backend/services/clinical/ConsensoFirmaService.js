@@ -17,6 +17,8 @@
 import prisma from '../../config/prisma-optimization.js';
 import { logger } from '../../utils/logger.js';
 import ConsentFSEService from '../consent-fse/ConsentFSEService.js';
+import { GDPRService } from '../gdpr-service.js';
+import { CONSENSI_MODULI_CATALOG } from './consensiModuliCatalog.js';
 
 // Validità del token: 2 ore (il paziente può impiegare del tempo)
 const TOKEN_VALIDITY_MS = 2 * 60 * 60 * 1000;
@@ -384,6 +386,60 @@ class ConsensoFirmaService {
     }
 
     /**
+     * Sincronizza i consensi firmati su tablet nel sistema GDPR (ConsentRecord).
+     * Mirror di _syncFseConsentsFromSignedToken: il vocabolario è identico
+     * (ConsentRecord.consentType === ConsensoModulo.codice), così i consensi
+     * firmati a tablet compaiono e sono gestibili dalle pagine /gdpr.
+     *
+     * @param {Object} params
+     * @param {Object} params.tokenRecord - record ConsensoFirmaToken pre-firma
+     * @param {string[]} params.firmatoConsensi - codici consenso accettati
+     * @param {string} [params.ipAddress]
+     * @param {string} [params.userAgent]
+     */
+    async _syncGdprConsentsFromSignedToken({ tokenRecord, firmatoConsensi, ipAddress, userAgent }) {
+        const codici = (firmatoConsensi || []).filter(Boolean);
+        if (codici.length === 0) return;
+
+        const appointment = await prisma.appuntamento.findFirst({
+            where: { id: tokenRecord.appuntamentoId, tenantId: tokenRecord.tenantId, deletedAt: null },
+            select: { pazienteId: true },
+        });
+        if (!appointment?.pazienteId) return;
+
+        const titoloByCodice = {};
+        for (const m of CONSENSI_MODULI_CATALOG) titoloByCodice[m.codice] = m.titolo;
+
+        const synced = [];
+        for (const codice of codici) {
+            try {
+                await GDPRService.upsertConsent(appointment.pazienteId, codice, true, {
+                    purpose: titoloByCodice[codice] || `Consenso "${codice}" firmato su tablet`,
+                    legalBasis: 'consent',
+                    tenantId: tokenRecord.tenantId,
+                    ipAddress,
+                    userAgent,
+                    source: 'TABLET_FIRMA',
+                });
+                synced.push(codice);
+            } catch (err) {
+                logger.warn({ component: 'ConsensoFirmaService', codice, err: err.message }, 'Sync GDPR consenso non riuscita');
+            }
+        }
+
+        if (synced.length > 0) {
+            await this._logConsentAudit({
+                tenantId: tokenRecord.tenantId,
+                personId: appointment.pazienteId,
+                appuntamentoId: tokenRecord.appuntamentoId,
+                tokenId: tokenRecord.id,
+                action: 'CONSENT_GDPR_SYNC_FROM_TABLET',
+                details: { syncedCodici: synced },
+            });
+        }
+    }
+
+    /**
      * Valida un token e restituisce i dati per la pagina consenso.
      * Usato dalla pagina pubblica su tablet.
      *
@@ -495,6 +551,14 @@ class ConsensoFirmaService {
             tokenRecord: record,
             firmatoConsensi,
             firmatoPazienteNome,
+        });
+
+        // Sync verso il sistema GDPR (ConsentRecord) — vocabolario unico codice↔consentType
+        await this._syncGdprConsentsFromSignedToken({
+            tokenRecord: record,
+            firmatoConsensi,
+            ipAddress,
+            userAgent,
         });
 
         await this._logConsentAudit({

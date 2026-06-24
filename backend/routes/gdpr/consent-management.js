@@ -12,13 +12,17 @@ import { authenticateAdvanced } from '../../middleware/auth-advanced.js';
 import { requireRoles } from '../../middleware/rbac.js';
 import { getEffectiveTenantId } from '../../utils/tenantHelper.js';
 import { logger } from '../../utils/logger.js';
+import { CONSENSI_MODULI_CATALOG, CONSENSI_MODULI_CODICI } from '../../services/clinical/consensiModuliCatalog.js';
 
 const router = express.Router();
 
 /**
  * Valid consent types for validation
+ * Vocabolario unico: i tipi GDPR generici (legacy) + i codici dei moduli consenso
+ * (gdpr, sanitari, marketing, comunicazioni, prestazione, chirurgico, fse_*, mdl_sorveglianza),
+ * così la firma tablet e le pagine /gdpr condividono lo stesso ConsentRecord.consentType.
  */
-const VALID_CONSENT_TYPES = [
+const LEGACY_CONSENT_TYPES = [
     'marketing',
     'analytics',
     'functional',
@@ -26,6 +30,7 @@ const VALID_CONSENT_TYPES = [
     'data_processing',
     'third_party_sharing'
 ];
+const VALID_CONSENT_TYPES = Array.from(new Set([...LEGACY_CONSENT_TYPES, ...CONSENSI_MODULI_CODICI]));
 
 /**
  * Valid legal basis for consent
@@ -40,6 +45,83 @@ const VALID_LEGAL_BASIS = [
 ];
 
 /**
+ * Pattern dei codici consenso (legacy + moduli tablet + moduli custom del tenant).
+ * Charset ristretto: nessuna injection, e supporta i codici personalizzati dei moduli.
+ */
+const CONSENT_TYPE_RX = /^[a-zA-Z0-9_]{2,80}$/;
+
+/**
+ * Autorizzazione cross-persona con isolamento tenant.
+ * - Sempre consentito su se stessi.
+ * - Su un'altra persona: richiede ruolo global_admin E che la persona target abbia
+ *   un profilo attivo nel tenant effettivo del richiedente (no azioni cross-tenant).
+ */
+async function ensureCrossPersonAllowed(req, personId) {
+    if (personId === req.person.id) return true;
+    if (!req.person.roles?.includes('global_admin')) return false;
+    const tenantId = getEffectiveTenantId(req);
+    if (!tenantId) return false;
+    const profile = await prisma.personTenantProfile.findFirst({
+        where: { personId, tenantId, deletedAt: null, isActive: true },
+        select: { id: true }
+    });
+    return Boolean(profile);
+}
+
+/**
+ * List consent modules (vocabolario unico) per la UI /gdpr.
+ * Ritorna i moduli del tenant: override DB (se presenti) + default dal catalogo.
+ * Solo autenticazione (no permesso impostazioni) — serve a tutti gli utenti per i propri consensi.
+ */
+router.get('/modules',
+    authenticateAdvanced,
+    async (req, res) => {
+        try {
+            const tenantId = getEffectiveTenantId(req);
+
+            let dbModuli = [];
+            try {
+                dbModuli = await prisma.consensoModulo.findMany({
+                    where: { tenantId, deletedAt: null },
+                    select: {
+                        codice: true, titolo: true, sottotitolo: true,
+                        obbligatorio: true, attivo: true, ordine: true, validitaGiorni: true
+                    }
+                });
+            } catch (_) { dbModuli = []; }
+
+            const byCodice = new Map();
+            // Default dal catalogo
+            for (const m of CONSENSI_MODULI_CATALOG) {
+                byCodice.set(m.codice, { ...m, attivo: true, isDefault: true });
+            }
+            // Override DB (vincono sui default)
+            for (const m of dbModuli) {
+                byCodice.set(m.codice, { ...byCodice.get(m.codice), ...m, isDefault: false });
+            }
+
+            const moduli = Array.from(byCodice.values())
+                .filter((m) => m.attivo !== false)
+                .sort((a, b) => (a.ordine ?? 0) - (b.ordine ?? 0));
+
+            res.json({ success: true, data: { modules: moduli } });
+        } catch (error) {
+            logger.error('Failed to list consent modules', {
+                component: 'gdpr-consent-management',
+                action: 'listModules',
+                error: 'Operazione non riuscita',
+                personId: req.person?.id
+            });
+            res.status(500).json({
+                success: false,
+                error: 'Errore nel recupero dei moduli consenso',
+                code: 'GDPR_CONSENT_MODULES_FAILED'
+            });
+        }
+    }
+);
+
+/**
  * Grant consent (new endpoint)
  */
 router.post('/grant',
@@ -47,7 +129,7 @@ router.post('/grant',
     [
         body('personId').isString().notEmpty(),
         body('consentTypes').isArray({ min: 1 }),
-        body('consentTypes.*').isString().isIn(VALID_CONSENT_TYPES),
+        body('consentTypes.*').isString().matches(CONSENT_TYPE_RX),
         body('purpose').isString().isLength({ min: 10, max: 500 }),
         body('legalBasis').optional().isString().isIn(VALID_LEGAL_BASIS)
     ],
@@ -63,8 +145,8 @@ router.post('/grant',
 
             const { personId, consentTypes, purpose, legalBasis = 'consent' } = req.body;
 
-            // Check if user can grant consent for other person
-            if (personId !== req.person.id && !req.person.roles.includes('global_admin')) {
+            // Check if user can grant consent for other person (con isolamento tenant)
+            if (!(await ensureCrossPersonAllowed(req, personId))) {
                 return res.status(403).json({
                     error: 'Accesso negato alla concessione del consenso per un\'altra persona',
                     code: 'GDPR_ACCESS_DENIED'
@@ -74,22 +156,14 @@ router.post('/grant',
             const consents = [];
 
             for (const consentType of consentTypes) {
-                const consent = await GDPRService.recordConsent(
-                    personId,
-                    consentType,
+                // Upsert idempotente: niente record duplicati ad ogni toggle
+                const consent = await GDPRService.upsertConsent(personId, consentType, true, {
                     purpose,
-                    legalBasis
-                );
-
-                // Update consent record with request details
-                await prisma.consentRecord.update({
-                    where: { id: consent.id },
-                    data: {
-                        ipAddress: req.ip,
-                        userAgent: req.get('User-Agent')
-                    }
+                    legalBasis,
+                    ipAddress: req.ip,
+                    userAgent: req.get('User-Agent'),
+                    source: 'GDPR_PAGE'
                 });
-
                 consents.push(consent);
             }
 
@@ -139,7 +213,7 @@ router.post('/revoke',
     [
         body('personId').isString().notEmpty(),
         body('consentTypes').isArray({ min: 1 }),
-        body('consentTypes.*').isString().notEmpty(),
+        body('consentTypes.*').isString().matches(CONSENT_TYPE_RX),
         body('reason').optional().isString().isLength({ max: 500 })
     ],
     async (req, res) => {
@@ -154,8 +228,8 @@ router.post('/revoke',
 
             const { personId, consentTypes, reason } = req.body;
 
-            // Check if user can revoke consent for other person
-            if (personId !== req.person.id && !req.person.roles.includes('global_admin')) {
+            // Check if user can revoke consent for other person (con isolamento tenant)
+            if (!(await ensureCrossPersonAllowed(req, personId))) {
                 return res.status(403).json({
                     error: 'Accesso negato alla revoca del consenso per un\'altra persona',
                     code: 'GDPR_ACCESS_DENIED'
@@ -165,12 +239,14 @@ router.post('/revoke',
             const revokedConsents = [];
 
             for (const consentType of consentTypes) {
-                const consent = await GDPRService.withdrawConsent(
-                    personId,
-                    consentType,
-                    reason
-                );
-                revokedConsents.push(consent);
+                // Revoca tollerante: no-op (null) se il consenso non è attivo → niente 500
+                const consent = await GDPRService.upsertConsent(personId, consentType, false, {
+                    reason,
+                    ipAddress: req.ip,
+                    userAgent: req.get('User-Agent'),
+                    source: 'GDPR_PAGE'
+                });
+                if (consent) revokedConsents.push(consent);
             }
 
             logger.info('Person consents revoked', {
@@ -216,7 +292,7 @@ router.post('/revoke',
 router.post('/',
     authenticateAdvanced,
     [
-        body('consentType').isString().isIn(VALID_CONSENT_TYPES),
+        body('consentType').isString().matches(CONSENT_TYPE_RX),
         body('purpose').isString().isLength({ min: 10, max: 500 }),
         body('legalBasis').optional().isString().isIn(VALID_LEGAL_BASIS)
     ],
@@ -233,20 +309,13 @@ router.post('/',
             const { consentType, purpose, legalBasis = 'consent' } = req.body;
             const personId = req.person.id;
 
-            const consent = await GDPRService.recordConsent(
-                personId,
-                consentType,
+            // Upsert idempotente sul proprio consenso
+            const consent = await GDPRService.upsertConsent(personId, consentType, true, {
                 purpose,
-                legalBasis
-            );
-
-            // Update consent record with request details
-            await prisma.consentRecord.update({
-                where: { id: consent.id },
-                data: {
-                    ipAddress: req.ip,
-                    userAgent: req.get('User-Agent')
-                }
+                legalBasis,
+                ipAddress: req.ip,
+                userAgent: req.get('User-Agent'),
+                source: 'GDPR_PAGE'
             });
 
             logger.info('Person consent recorded', {

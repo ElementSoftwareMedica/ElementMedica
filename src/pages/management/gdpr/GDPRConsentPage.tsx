@@ -132,6 +132,8 @@ const toFormData = (s: PrivacySettings): PrivacySettingsFormData => ({
 export const GDPRConsentPage: React.FC = () => {
   const {
     consents,
+    modules,
+    modulesLoading,
     loading,
     error,
     grantConsent,
@@ -148,15 +150,23 @@ export const GDPRConsentPage: React.FC = () => {
   const complianceScore = privacy.getComplianceScore();
   const recommendations = privacy.getComplianceRecommendations();
 
-  const [confirm, setConfirm] = useState<{ type: ConsentType; grant: boolean } | null>(null);
+  const [confirm, setConfirm] = useState<{ codice: string; titolo: string; grant: boolean } | null>(null);
   const [processing, setProcessing] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [savingKey, setSavingKey] = useState<string | null>(null);
 
-  const consentList = useMemo(
-    () => CONSENT_ORDER.filter((t) => CONSENT_LABELS[t]),
-    []
-  );
+  // Lista consensi: moduli dinamici del tenant (vocabolario unico tablet ↔ /gdpr);
+  // fallback ai default statici se i moduli non sono ancora caricati.
+  const consentList = useMemo(() => {
+    if (modules && modules.length > 0) {
+      return modules.map((m) => ({ codice: m.codice, titolo: m.titolo, descrizione: m.sottotitolo || '' }));
+    }
+    return CONSENT_ORDER.filter((t) => CONSENT_LABELS[t]).map((t) => ({
+      codice: t,
+      titolo: CONSENT_LABELS[t].label,
+      descrizione: CONSENT_LABELS[t].description
+    }));
+  }, [modules]);
 
   const handleRefresh = () => {
     void refreshConsents();
@@ -168,11 +178,11 @@ export const GDPRConsentPage: React.FC = () => {
     setProcessing(true);
     try {
       if (confirm.grant) {
-        await grantConsent({ consentType: confirm.type, purpose: CONSENT_LABELS[confirm.type].label });
-        showToast({ type: 'success', message: `Consenso "${CONSENT_LABELS[confirm.type].label}" concesso.` });
+        await grantConsent({ consentType: confirm.codice as ConsentType, purpose: confirm.titolo });
+        showToast({ type: 'success', message: `Consenso "${confirm.titolo}" concesso.` });
       } else {
-        await withdrawConsent({ consentType: confirm.type, reason: 'Revoca da parte dell’utente' });
-        showToast({ type: 'success', message: `Consenso "${CONSENT_LABELS[confirm.type].label}" revocato.` });
+        await withdrawConsent({ consentType: confirm.codice as ConsentType, reason: 'Revoca da parte dell’utente' });
+        showToast({ type: 'success', message: `Consenso "${confirm.titolo}" revocato.` });
       }
     } catch {
       showToast({ type: 'error', message: 'Operazione sui consensi non riuscita. Riprova.' });
@@ -250,33 +260,38 @@ export const GDPRConsentPage: React.FC = () => {
           <h2 className="font-semibold text-gray-900 dark:text-gray-50">Gestione consensi</h2>
         </div>
         <div className="divide-y divide-gray-100 dark:divide-gray-700">
-          {consentList.map((type) => {
-            const granted = hasConsent(type);
-            const info = CONSENT_LABELS[type];
-            return (
-              <div key={type} className="px-6 py-4 flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900 dark:text-gray-100">{info.label}</span>
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold ${
-                        granted ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
-                      }`}
-                    >
-                      {granted ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                      {granted ? 'Concesso' : 'Non concesso'}
-                    </span>
+          {modulesLoading && consentList.length === 0 ? (
+            <div className="px-6 py-10 text-center text-sm text-gray-500">Caricamento moduli consenso…</div>
+          ) : (
+            consentList.map((item) => {
+              const granted = hasConsent(item.codice);
+              return (
+                <div key={item.codice} className="px-6 py-4 flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{item.titolo}</span>
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold ${
+                          granted ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {granted ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                        {granted ? 'Concesso' : 'Non concesso'}
+                      </span>
+                    </div>
+                    {item.descrizione && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{item.descrizione}</p>
+                    )}
                   </div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{info.description}</p>
+                  <Toggle
+                    checked={granted}
+                    disabled={loading}
+                    onChange={() => setConfirm({ codice: item.codice, titolo: item.titolo, grant: !granted })}
+                  />
                 </div>
-                <Toggle
-                  checked={granted}
-                  disabled={loading}
-                  onChange={() => setConfirm({ type, grant: !granted })}
-                />
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </section>
 
@@ -383,7 +398,7 @@ export const GDPRConsentPage: React.FC = () => {
           confirm ? (
             <span>
               Vuoi {confirm.grant ? 'concedere' : 'revocare'} il consenso per{' '}
-              <strong>{CONSENT_LABELS[confirm.type].label}</strong>?
+              <strong>{confirm.titolo}</strong>?
             </span>
           ) : null
         }

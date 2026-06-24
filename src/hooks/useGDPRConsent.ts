@@ -12,12 +12,23 @@ import {
   UseGDPRConsentReturn,
   ConsentsListResponse,
   ConsentResponse,
-  ConsentType
+  ConsentType,
+  ConsentModule
 } from '../types/gdpr';
 import { useAuth } from '../context/AuthContext';
 
-export const useGDPRConsent = (): UseGDPRConsentReturn => {
+/**
+ * Hook consensi GDPR (ConsentRecord), vocabolario unico con i moduli tablet.
+ *
+ * @param options.personId - se valorizzato, opera sui consensi di QUEL paziente
+ *   (vista operatore: legge `/gdpr/consents/:personId`, grant/revoke con personId).
+ *   Altrimenti opera sull'utente loggato (self-service `current-user`).
+ */
+export const useGDPRConsent = (options?: { personId?: string }): UseGDPRConsentReturn => {
+  const targetPersonId = options?.personId;
   const [consents, setConsents] = useState<GDPRConsent[]>([]);
+  const [modules, setModules] = useState<ConsentModule[]>([]);
+  const [modulesLoading, setModulesLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
@@ -32,7 +43,10 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
       setLoading(true);
       setError(null);
 
-      const data = await apiGet<{ consents: GDPRConsent[]; history: GDPRConsent[] } | ConsentsListResponse>('/api/v1/gdpr/consents/current-user');
+      const endpoint = targetPersonId
+        ? `/api/v1/gdpr/consents/${targetPersonId}`
+        : '/api/v1/gdpr/consents/current-user';
+      const data = await apiGet<{ consents: GDPRConsent[]; history: GDPRConsent[] } | ConsentsListResponse>(endpoint);
 
       // Backend returns { consents, history } directly, not wrapped in { success, data }
       if ('success' in data && data.success && data.data) {
@@ -55,6 +69,25 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
     } finally {
       setLoading(false);
     }
+  }, [user, targetPersonId]);
+
+  /**
+   * Fetch dei moduli consenso del tenant (vocabolario unico per la UI)
+   */
+  const fetchModules = useCallback(async () => {
+    if (!user) return;
+    try {
+      setModulesLoading(true);
+      const data = await apiGet<{ success?: boolean; data?: { modules: ConsentModule[] } }>(
+        '/api/v1/gdpr/consents/modules'
+      );
+      const list = data?.data?.modules;
+      setModules(Array.isArray(list) ? list : []);
+    } catch {
+      setModules([]);
+    } finally {
+      setModulesLoading(false);
+    }
   }, [user]);
 
   /**
@@ -65,25 +98,23 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
       setLoading(true);
       setError(null);
 
-      const respData = await apiPost<{ consent: GDPRConsent; message: string } | ConsentResponse>('/api/v1/gdpr/consents', {
-        consentType: data.consentType,
-        purpose: data.purpose,
-        legalBasis: data.legalBasis || 'consent'
-      });
-
-      // Backend returns { message, consent } directly
-      const newConsent = 'data' in respData && respData.data ? respData.data.consent : (respData as { consent: GDPRConsent }).consent;
-
-      if (newConsent) {
-        // Update local state
-        setConsents(prev => {
-          const filtered = prev.filter(c => c.consentType !== newConsent.consentType);
-          return [...filtered, newConsent];
+      if (targetPersonId) {
+        // Vista operatore: grant on-behalf del paziente
+        await apiPost('/api/v1/gdpr/consents/grant', {
+          personId: targetPersonId,
+          consentTypes: [data.consentType],
+          purpose: data.purpose,
+          legalBasis: data.legalBasis || 'consent'
         });
-
-        // Toast handled by calling component
+        await fetchConsents();
       } else {
-        throw new Error('Errore nella concessione del consenso');
+        await apiPost('/api/v1/gdpr/consents', {
+          consentType: data.consentType,
+          purpose: data.purpose,
+          legalBasis: data.legalBasis || 'consent'
+        });
+        // Refetch per riflettere lo stato reale del backend (consentGiven/date)
+        await fetchConsents();
       }
     } catch (err) {
       const errorMessage = 'Errore nella concessione del consenso';
@@ -93,7 +124,7 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [targetPersonId, fetchConsents]);
 
   /**
    * Withdraw an existing consent
@@ -103,27 +134,21 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
       setLoading(true);
       setError(null);
 
-      const respData = await apiPost<{ consent: GDPRConsent; message: string } | ConsentResponse>('/api/v1/gdpr/consents/withdraw', {
-        consentType: data.consentType,
-        reason: data.reason
-      });
-
-      // Backend returns { message, consent } directly
-      const withdrawnConsent = 'data' in respData && respData.data ? respData.data.consent : (respData as { consent: GDPRConsent }).consent;
-
-      if (withdrawnConsent) {
-        // Update local state
-        setConsents(prev =>
-          prev.map(consent =>
-            consent.consentType === withdrawnConsent.consentType
-              ? { ...consent, ...withdrawnConsent }
-              : consent
-          )
-        );
-
-        // Toast handled by calling component
+      if (targetPersonId) {
+        // Vista operatore: revoke on-behalf del paziente
+        await apiPost('/api/v1/gdpr/consents/revoke', {
+          personId: targetPersonId,
+          consentTypes: [data.consentType],
+          reason: data.reason
+        });
+        await fetchConsents();
       } else {
-        throw new Error('Errore nella revoca del consenso');
+        await apiPost('/api/v1/gdpr/consents/withdraw', {
+          consentType: data.consentType,
+          reason: data.reason
+        });
+        // Refetch per riflettere lo stato reale del backend
+        await fetchConsents();
       }
     } catch (err) {
       const errorMessage = 'Errore nella revoca del consenso';
@@ -133,7 +158,7 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [targetPersonId, fetchConsents]);
 
   /**
    * Refresh consents data
@@ -203,14 +228,18 @@ export const useGDPRConsent = (): UseGDPRConsentReturn => {
   useEffect(() => {
     if (user) {
       fetchConsents();
+      fetchModules();
     } else {
       setConsents([]);
+      setModules([]);
       setError(null);
     }
-  }, [user, fetchConsents]);
+  }, [user, fetchConsents, fetchModules]);
 
   return {
     consents,
+    modules,
+    modulesLoading,
     loading,
     error,
     grantConsent,

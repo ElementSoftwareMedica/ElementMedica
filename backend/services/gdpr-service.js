@@ -149,6 +149,103 @@ export class GDPRService {
     }
 
     /**
+     * Upsert idempotente di un consenso (usato dalla sync firma tablet e dalla
+     * gestione unificata /gdpr). Evita i duplicati di `recordConsent` (che fa sempre create).
+     *
+     * - consentGiven=true: se esiste già un record attivo per (personId, consentType, tenant)
+     *   non crea duplicati; altrimenti crea. Logga CONSENT_RECORDED con `details.source`.
+     * - consentGiven=false: revoca l'eventuale record attivo (tollerante: no-op se assente).
+     *
+     * @param {string} personId
+     * @param {string} consentType - codice consenso (es. 'gdpr','sanitari','marketing'...)
+     * @param {boolean} consentGiven
+     * @param {Object} [opts]
+     * @param {string} [opts.purpose]
+     * @param {string} [opts.legalBasis='consent']
+     * @param {string} [opts.tenantId]
+     * @param {string} [opts.ipAddress]
+     * @param {string} [opts.userAgent]
+     * @param {string} [opts.source] - provenienza (es. 'TABLET_FIRMA','GDPR_PAGE')
+     * @param {string} [opts.consentVersion]
+     * @returns {Promise<Object|null>} record consenso (o null se revoca senza record attivo)
+     */
+    static async upsertConsent(personId, consentType, consentGiven, opts = {}) {
+        const {
+            purpose = null,
+            legalBasis = 'consent',
+            tenantId = null,
+            ipAddress = null,
+            userAgent = null,
+            source = null,
+            consentVersion = null,
+            reason = null,
+        } = opts;
+
+        // Risolvi tenantId (obbligatorio in ConsentRecord)
+        let resolvedTenantId = tenantId;
+        if (!resolvedTenantId) {
+            const profile = await prisma.personTenantProfile.findFirst({
+                where: { personId, deletedAt: null, isActive: true },
+                orderBy: { isPrimary: 'desc' },
+                select: { tenantId: true }
+            });
+            resolvedTenantId = profile?.tenantId;
+        }
+        if (!resolvedTenantId) throw new Error('Unable to resolve tenantId for consent record');
+
+        const existingActive = await prisma.consentRecord.findFirst({
+            where: { personId, consentType, tenantId: resolvedTenantId, consentGiven: true, withdrawnAt: null, deletedAt: null },
+            orderBy: { givenAt: 'desc' }
+        });
+
+        if (consentGiven) {
+            if (existingActive) {
+                return existingActive; // idempotente: già attivo
+            }
+            const consent = await prisma.consentRecord.create({
+                data: {
+                    personId,
+                    consentType,
+                    consentGiven: true,
+                    consentVersion,
+                    ipAddress,
+                    userAgent,
+                    tenantId: resolvedTenantId,
+                }
+            });
+            await this.logGDPRActivity({
+                personId,
+                tenantId: resolvedTenantId,
+                action: 'CONSENT_RECORDED',
+                dataType: consentType,
+                purpose,
+                legalBasis,
+                ipAddress,
+                userAgent,
+                details: { consentId: consent.id, consentType, source }
+            });
+            return consent;
+        }
+
+        // consentGiven === false → revoca tollerante
+        if (!existingActive) return null;
+        const updated = await prisma.consentRecord.update({
+            where: { id: existingActive.id },
+            data: { consentGiven: false, withdrawnAt: new Date() }
+        });
+        await this.logGDPRActivity({
+            personId,
+            tenantId: resolvedTenantId,
+            action: 'CONSENT_WITHDRAWN',
+            dataType: consentType,
+            ipAddress,
+            userAgent,
+            details: { consentId: existingActive.id, consentType, source, reason }
+        });
+        return updated;
+    }
+
+    /**
      * Check if user has given consent for specific purpose
      */
     static async hasConsent(personId, consentType) {
