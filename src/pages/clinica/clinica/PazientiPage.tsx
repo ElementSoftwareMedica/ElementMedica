@@ -451,13 +451,12 @@ const PazientiPage: React.FC = () => {
 
             {/* Filters */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-3">
-                {/* Row 1: Search + Periodo + Filters + Columns.
-                    Quando la ricerca è attiva il grid collassa a [1fr auto] e gli altri
-                    filtri vengono nascosti, lasciando la searchbar a tutta larghezza. */}
-                <div className={`grid grid-cols-1 gap-3 ${searchActive ? 'lg:grid-cols-[1fr_auto]' : 'md:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto_auto_auto]'}`}>
+                {/* Row 1: ricerca sempre prominente (flex-1) + Colonne + Reset.
+                    La searchbar resta a tutta larghezza così il testo digitato è ben visibile. */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     {/* Search */}
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <div className="relative flex-1 min-w-0">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                         <input
                             type="text"
                             placeholder="Cerca per nome, CF, email..."
@@ -465,7 +464,7 @@ const PazientiPage: React.FC = () => {
                             onChange={(e) => setSearchTerm(e.target.value)}
                             onFocus={() => setSearchFocused(true)}
                             onBlur={() => setSearchFocused(false)}
-                            className="w-full pl-10 pr-10 py-2 border border-gray-200 rounded-xl bg-gradient-to-r from-white to-gray-50 shadow-sm hover:border-teal-400 hover:shadow-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:ring-offset-1 text-sm text-gray-900 placeholder-gray-400 h-10 transition-all duration-300"
+                            className="w-full pl-11 pr-10 py-2.5 border border-gray-200 rounded-xl bg-gradient-to-r from-white to-gray-50 shadow-sm hover:border-teal-400 hover:shadow-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:ring-offset-1 text-sm text-gray-900 placeholder-gray-400 h-11 transition-all duration-300"
                         />
                         {searchTerm && (
                             <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -474,69 +473,8 @@ const PazientiPage: React.FC = () => {
                         )}
                     </div>
 
-                    {/* Periodo */}
-                    {!searchActive && <DateRangeCalendar
-                        value={periodoRange ?? { start: new Date(), end: new Date() }}
-                        onChange={(range) => setPeriodoRange(range.start ? range : null)}
-                        placeholder="Periodo visita/app."
-                        theme="teal"
-                        size="md"
-                        clearable
-                        showPresets
-                    />}
-
-                    {/* Role filter */}
-                    {!searchActive && (
-                    <div className="relative">
-                        <UserCog className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
-                        <select
-                            value={roleFilter}
-                            onChange={(e) => setRoleFilter(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl bg-gradient-to-r from-white to-gray-50 shadow-sm hover:border-teal-400 hover:shadow-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:ring-offset-1 appearance-none text-sm h-10 transition-all duration-300"
-                        >
-                            <option value="">Tutti i ruoli</option>
-                            <option value="DIPENDENTE">Solo dipendenti</option>
-                            <option value="PAZIENTE_SOLO">Solo pazienti</option>
-                        </select>
-                    </div>
-                    )}
-
-                    {/* Company filter */}
-                    {!searchActive && (
-                    <div className="relative">
-                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
-                        <select
-                            value={companyFilter}
-                            onChange={(e) => setCompanyFilter(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl bg-gradient-to-r from-white to-gray-50 shadow-sm hover:border-teal-400 hover:shadow-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:ring-offset-1 appearance-none text-sm h-10 transition-all duration-300"
-                        >
-                            <option value="">Tutte le aziende</option>
-                            {companies.map(c => (
-                                <option key={c.id} value={c.id}>{c.ragioneSociale}</option>
-                            ))}
-                        </select>
-                    </div>
-                    )}
-
-                    {/* Branca specialistica */}
-                    {!searchActive && (
-                    <div className="relative">
-                        <Stethoscope className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
-                        <select
-                            value={brancaFilter}
-                            onChange={(e) => setBrancaFilter(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl bg-gradient-to-r from-white to-gray-50 shadow-sm hover:border-teal-400 hover:shadow-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:ring-offset-1 appearance-none text-sm h-10 transition-all duration-300"
-                        >
-                            <option value="">Tutte le branche</option>
-                            {BRANCHE_SPECIALISTICHE.map(b => (
-                                <option key={b} value={b}>{b}</option>
-                            ))}
-                        </select>
-                    </div>
-                    )}
-
-                    {/* Controls: Columns + Reset */}
-                    <div className="flex items-center gap-2">
+                    {/* Controls: Columns + Reset (sempre visibili) */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
                         {/* Column selector */}
                         <div className="relative" ref={colMenuRef}>
                             <button
@@ -580,6 +518,66 @@ const PazientiPage: React.FC = () => {
                         )}
                     </div>
                 </div>
+
+                {/* Row 2: filtri — collassati quando la ricerca è attiva (focus o testo presente) */}
+                {!searchActive && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {/* Periodo */}
+                        <DateRangeCalendar
+                            value={periodoRange ?? { start: new Date(), end: new Date() }}
+                            onChange={(range) => setPeriodoRange(range.start ? range : null)}
+                            placeholder="Periodo visita/app."
+                            theme="teal"
+                            size="md"
+                            clearable
+                            showPresets
+                        />
+
+                        {/* Role filter */}
+                        <div className="relative">
+                            <UserCog className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
+                            <select
+                                value={roleFilter}
+                                onChange={(e) => setRoleFilter(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl bg-gradient-to-r from-white to-gray-50 shadow-sm hover:border-teal-400 hover:shadow-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:ring-offset-1 appearance-none text-sm h-10 transition-all duration-300"
+                            >
+                                <option value="">Tutti i ruoli</option>
+                                <option value="DIPENDENTE">Solo dipendenti</option>
+                                <option value="PAZIENTE_SOLO">Solo pazienti</option>
+                            </select>
+                        </div>
+
+                        {/* Company filter */}
+                        <div className="relative">
+                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
+                            <select
+                                value={companyFilter}
+                                onChange={(e) => setCompanyFilter(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl bg-gradient-to-r from-white to-gray-50 shadow-sm hover:border-teal-400 hover:shadow-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:ring-offset-1 appearance-none text-sm h-10 transition-all duration-300"
+                            >
+                                <option value="">Tutte le aziende</option>
+                                {companies.map(c => (
+                                    <option key={c.id} value={c.id}>{c.ragioneSociale}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Branca specialistica */}
+                        <div className="relative">
+                            <Stethoscope className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
+                            <select
+                                value={brancaFilter}
+                                onChange={(e) => setBrancaFilter(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl bg-gradient-to-r from-white to-gray-50 shadow-sm hover:border-teal-400 hover:shadow-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:ring-offset-1 appearance-none text-sm h-10 transition-all duration-300"
+                            >
+                                <option value="">Tutte le branche</option>
+                                {BRANCHE_SPECIALISTICHE.map(b => (
+                                    <option key={b} value={b}>{b}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Error */}

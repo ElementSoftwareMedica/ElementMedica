@@ -203,9 +203,10 @@ const OT23Card: React.FC<OT23CardProps> = ({
         }
     };
 
-    // Navigazione a pagina dettaglio OT23 (context-aware: medica vs sicurezza layout)
+    // Navigazione a pagina dettaglio OT23 (context-aware: medica vs sicurezza layout).
+    // Passa la provenienza così il dettaglio può tornare all'azienda da cui si è arrivati (regola #36).
     const handleViewDetails = (id: string) => {
-        navigate(`${ot23BasePath}/${id}`);
+        navigate(`${ot23BasePath}/${id}`, { state: { from: location.pathname + location.search } });
     };
 
     // Crea nuova domanda per anno corrente

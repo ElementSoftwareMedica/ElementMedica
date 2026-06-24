@@ -22,6 +22,7 @@ import {
     FileText,
     Hash,
     Info,
+    List,
     Loader2,
     Plus,
     Send,
@@ -302,6 +303,9 @@ export default function OT23DetailPage() {
     const ot23ListPath = location.pathname.startsWith('/poliambulatorio')
         ? '/poliambulatorio/sicurezza/ot23'
         : '/sicurezza/ot23';
+    // "Indietro" torna alla pagina di provenienza (es. dettaglio azienda) se disponibile,
+    // altrimenti alla lista OT23 (regola #36 - rispetta la provenienza).
+    const backTarget = (location.state as { from?: string } | null)?.from || ot23ListPath;
     const { showToast } = useToast();
     const { getOperateHeaders } = useTenantMode();
     const { confirm: confirmDialog } = useConfirmDialog();
@@ -444,9 +448,13 @@ export default function OT23DetailPage() {
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => navigate(ot23ListPath)}>
+                    <Button variant="outline" onClick={() => navigate(backTarget)}>
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Indietro
+                    </Button>
+                    <Button variant="outline" onClick={() => navigate(ot23ListPath)}>
+                        <List className="w-4 h-4 mr-2" />
+                        Visualizza tutti
                     </Button>
                     <Button variant="outline" onClick={handleDownloadXml}>
                         <Download className="w-4 h-4 mr-2" />
