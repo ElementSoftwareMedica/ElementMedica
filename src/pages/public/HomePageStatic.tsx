@@ -14,6 +14,7 @@ import {
     FileCheck, HeadphonesIcon, BookOpen, MapPin,
     Zap, Laptop, CalendarCheck, Bell, ClipboardList,
     MousePointerClick, MailCheck, UserCheck, FileText,
+    Radar,
 } from 'lucide-react';
 import { PublicLayout } from '../../components/public/PublicLayout';
 import { HeroSection } from '../../components/public/HeroSection';
@@ -42,7 +43,7 @@ const HomePageSicurezza: React.FC = () => {
         { q: 'Possiamo fare la formazione in azienda?', a: 'Sì. Offriamo formazione "in house" direttamente presso la vostra sede. Questo riduce i tempi di assenza dal lavoro ed è spesso più economico per gruppi di 5+ persone. Disponibili anche weekend e orario serale.' },
         { q: 'Cos\'è il DVR e chi deve redigerlo?', a: 'Il Documento di Valutazione dei Rischi è redatto dal datore di lavoro in collaborazione con RSPP e MC. È obbligatorio per TUTTE le aziende con almeno 1 dipendente. Deve essere aggiornato dopo ogni modifica significativa o infortunio.' },
         { q: 'Quando è obbligatoria la sorveglianza sanitaria?', a: 'La sorveglianza sanitaria (visite mediche del lavoro) è obbligatoria quando dalla valutazione dei rischi emergono: rumore, vibrazioni, VDT >20h/settimana, MMC, agenti chimici/biologici, lavoro notturno, ecc. Il medico competente decide protocollo e frequenza.' },
-        { q: 'Cosa significa "ente accreditato" per la formazione sicurezza?', a: 'Un ente accreditato è riconosciuto dalla Regione per erogare formazione professionale. Gli attestati rilasciati da enti non accreditati non hanno valore legale per il D.Lgs 81/08. Element Sicurezza è ente accreditato con qualifica ISO 9001.' },
+        { q: 'Cosa significa "ente accreditato" per la formazione sicurezza?', a: 'Un ente accreditato è riconosciuto dalla Regione per erogare formazione professionale. Gli attestati rilasciati da enti non accreditati non hanno valore legale per il D.Lgs 81/08. Element Sicurezza eroga la formazione in collaborazione con un Ente Accreditato in Regione.' },
     ];
 
     const structuredData = {
@@ -363,7 +364,7 @@ const HomePageSicurezza: React.FC = () => {
                     <h2 className="text-xl font-bold text-gray-900 text-center mb-8">Certificazioni e Accreditamenti</h2>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-3xl mx-auto">
                         {[
-                            { icon: Shield, name: 'Accreditamento Regionale', desc: 'Ente accreditato formazione continua', color: 'green' },
+                            { icon: Shield, name: 'Ente Accreditato in Regione', desc: 'In collaborazione con ente accreditato', color: 'green' },
                             { icon: CheckCircle, name: 'Attestati Riconosciuti', desc: 'Validità legale D.Lgs 81/08', color: 'violet' },
                             { icon: Users, name: 'Docenti Qualificati', desc: 'D.I. 6 marzo 2013', color: 'teal' },
                         ].map((c, i) => (
@@ -638,7 +639,7 @@ const HomePageMedica: React.FC = () => {
                             { icon: '🔬', name: 'Dermatologia', status: 'apertura', href: '/visite-specialistiche' },
                             { icon: '👁️', name: 'Oculistica', status: 'apertura', href: '/visite-specialistiche' },
                             { icon: '🧠', name: 'Neurologia', status: 'apertura', href: '/visite-specialistiche' },
-                            { icon: '🩻', name: 'Diagnostica', status: 'apertura', href: '/diagnostica' },
+                            { Icon: Radar, name: 'Diagnostica', status: 'apertura', href: '/diagnostica' },
                             { icon: '💉', name: 'Medicina Interna', status: 'apertura', href: '/visite-specialistiche' },
                             { icon: '📋', name: 'Medicina Preventiva', status: 'apertura', href: '/visite-specialistiche' },
                         ].map((s, i) => (

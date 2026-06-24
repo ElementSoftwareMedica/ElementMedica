@@ -243,12 +243,12 @@ const ChiSiamoMedicaStaticPage: React.FC = () => {
                         <h2 className="text-3xl font-bold text-gray-900 mb-3">Le Nostre Collaborazioni</h2>
                         <p className="text-gray-600 max-w-2xl mx-auto">Collaboriamo con le principali associazioni datoriali del territorio per portare salute e sicurezza alle imprese associate</p>
                     </div>
-                    <div className="grid md:grid-cols-2 gap-8 mb-10">
-                        <a href="https://www.confisipadova.it" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-4 p-8 bg-gray-50 rounded-2xl border border-gray-100 hover:border-teal-200 hover:shadow-md transition-all no-underline">
+                    <div className="grid md:grid-cols-2 gap-8">
+                        <a href="https://www.ascompd.com/" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-4 p-8 bg-gray-50 rounded-2xl border border-gray-100 hover:border-teal-200 hover:shadow-md transition-all no-underline">
                             <img
-                                src="/assets/logos/confisi-logo.png"
+                                src="/assets/logos/confcommercio-padova-logo.png"
                                 style={{ background: 'transparent' }}
-                                alt="CONFISI – Confederazione Italiana Sviluppo Imprese"
+                                alt="Confcommercio Padova"
                                 className="h-20 w-auto max-w-full object-contain"
                                 onError={(e) => {
                                     const el = e.currentTarget as HTMLImageElement;
@@ -258,12 +258,12 @@ const ChiSiamoMedicaStaticPage: React.FC = () => {
                                 }}
                             />
                             <div style={{ display: 'none' }} className="flex-col items-center gap-1" aria-hidden="true">
-                                <div className="text-2xl font-black text-gray-900">CONFISI</div>
-                                <div className="text-xs text-gray-500 text-center">CONFEDERAZIONE ITALIANA SVILUPPO IMPRESE</div>
+                                <div className="text-2xl font-black text-blue-900">Confcommercio</div>
+                                <div className="text-sm font-semibold text-blue-700">PADOVA</div>
                             </div>
                             <div className="text-center">
-                                <h3 className="font-bold text-gray-900">CONFISI</h3>
-                                <p className="text-sm text-gray-600 mt-1">Confederazione Italiana Sviluppo Imprese — Offriamo servizi di medicina del lavoro e formazione sicurezza alle aziende associate.</p>
+                                <h3 className="font-bold text-gray-900">Confcommercio Padova</h3>
+                                <p className="text-sm text-gray-600 mt-1">Partner per i servizi di medicina del lavoro e sorveglianza sanitaria alle imprese del commercio, turismo e servizi del territorio padovano.</p>
                             </div>
                         </a>
                         <a href="https://www.confartigianatopadova.it" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-4 p-8 bg-gray-50 rounded-2xl border border-gray-100 hover:border-teal-200 hover:shadow-md transition-all no-underline">
@@ -287,9 +287,29 @@ const ChiSiamoMedicaStaticPage: React.FC = () => {
                                 <p className="text-sm text-gray-600 mt-1">Partner ufficiale per i servizi medico-sanitari e di sicurezza sul lavoro alle imprese artigiane del territorio padovano.</p>
                             </div>
                         </a>
-                    </div>
-                    <div className="mt-8 flex justify-center">
-                        <a href="https://www.fimiebap.it/" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-4 p-8 bg-gray-50 rounded-2xl border border-gray-100 hover:border-teal-200 hover:shadow-md transition-all no-underline w-full max-w-lg">
+                        <a href="https://www.confisipadova.it" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-4 p-8 bg-gray-50 rounded-2xl border border-gray-100 hover:border-teal-200 hover:shadow-md transition-all no-underline">
+                            <img
+                                src="/assets/logos/confisi-logo.png"
+                                style={{ background: 'transparent' }}
+                                alt="CONFISI – Confederazione Italiana Sviluppo Imprese"
+                                className="h-20 w-auto max-w-full object-contain"
+                                onError={(e) => {
+                                    const el = e.currentTarget as HTMLImageElement;
+                                    el.style.display = 'none';
+                                    const next = el.nextElementSibling as HTMLElement | null;
+                                    if (next) next.style.display = 'flex';
+                                }}
+                            />
+                            <div style={{ display: 'none' }} className="flex-col items-center gap-1" aria-hidden="true">
+                                <div className="text-2xl font-black text-gray-900">CONFISI</div>
+                                <div className="text-xs text-gray-500 text-center">CONFEDERAZIONE ITALIANA SVILUPPO IMPRESE</div>
+                            </div>
+                            <div className="text-center">
+                                <h3 className="font-bold text-gray-900">CONFISI</h3>
+                                <p className="text-sm text-gray-600 mt-1">Confederazione Italiana Sviluppo Imprese — Offriamo servizi di medicina del lavoro e formazione sicurezza alle aziende associate.</p>
+                            </div>
+                        </a>
+                        <a href="https://www.fimiebap.it/" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-4 p-8 bg-gray-50 rounded-2xl border border-gray-100 hover:border-teal-200 hover:shadow-md transition-all no-underline">
                             <img
                                 src="/assets/logos/fimi-ebap-logo.jpg"
                                 alt="FIMI/EBAP – Ente Bilaterale per l'Agricoltura Padovana"

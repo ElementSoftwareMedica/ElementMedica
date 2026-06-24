@@ -224,7 +224,7 @@ export const CoursesPage: React.FC = () => {
     <PublicLayout>
       <SEOHead
         title="Corsi Sicurezza sul Lavoro | D.Lgs 81/08 | Padova - Element Sicurezza"
-        description="Corsi di sicurezza sul lavoro a Padova e Selvazzano Dentro: lavoratori, preposti, dirigenti, antincendio, primo soccorso, RSPP. Attestati D.Lgs 81/08 riconosciuti. Ente accreditato Regione Veneto."
+        description="Corsi di sicurezza sul lavoro a Padova e Selvazzano Dentro: lavoratori, preposti, dirigenti, antincendio, primo soccorso, RSPP. Attestati D.Lgs 81/08 riconosciuti. In collaborazione con Ente Accreditato in Regione Veneto."
         keywords={['corsi di sicurezza', 'corsi sicurezza sul lavoro', 'corsi sicurezza Padova', 'corsi sicurezza Selvazzano', 'formazione sicurezza lavoro', 'formazione D.Lgs 81/08', 'corsi sicurezza padova', 'corso lavoratori', 'antincendio', 'primo soccorso', 'RSPP', 'D.Lgs 81/08', 'ente accreditato veneto', 'attestato sicurezza']}
         canonicalUrl={`${window.location.origin}/corsi`}
         structuredData={jsonLdSchema}

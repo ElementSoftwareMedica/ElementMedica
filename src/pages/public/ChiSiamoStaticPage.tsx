@@ -40,8 +40,7 @@ const ChiSiamoStaticPage: React.FC = () => {
                 },
                 areaServed: { '@type': 'AdministrativeArea', name: 'Padova e Veneto' },
                 hasCredential: [
-                    { '@type': 'EducationalOccupationalCredential', credentialCategory: 'ISO 9001:2015' },
-                    { '@type': 'EducationalOccupationalCredential', credentialCategory: 'Accreditamento Regionale Formazione' },
+                    { '@type': 'EducationalOccupationalCredential', credentialCategory: 'Collaborazione con Ente Accreditato in Regione per la Formazione' },
                 ],
             },
         ],
@@ -51,7 +50,7 @@ const ChiSiamoStaticPage: React.FC = () => {
         <PublicLayout>
             <SEOHead
                 title="Chi Siamo | Element Sicurezza – Ente Formazione Sicurezza Lavoro Padova"
-                description="Element Sicurezza: in iter di certificazione ISO 9001 per formazione D.Lgs 81/08, RSPP esterno e medicina del lavoro a Padova e Selvazzano Dentro. Scopri la nostra storia, il team e i nostri valori."
+                description="Element Sicurezza: formazione D.Lgs 81/08 in collaborazione con un Ente Accreditato in Regione, RSPP esterno e medicina del lavoro a Padova e Selvazzano Dentro. Scopri la nostra storia, il team e i nostri valori."
                 keywords={[
                     'Element Sicurezza chi siamo',
                     'ente formazione sicurezza Padova',
@@ -59,12 +58,12 @@ const ChiSiamoStaticPage: React.FC = () => {
                     'RSPP esterno Padova',
                     'medicina del lavoro Selvazzano',
                     'formazione D.Lgs 81/08',
-                    'ISO 9001 sicurezza',
+                    'ente accreditato Regione Veneto',
                     'Selvazzano Dentro',
                 ]}
                 canonicalUrl="https://www.elementsicurezza.com/chi-siamo"
                 ogTitle="Chi Siamo – Element Sicurezza"
-                ogDescription="Dal 2023 nella sicurezza sul lavoro. Qualifiche professionali ISO 9001 e accreditamento in iter. 300+ aziende servite a Padova e Veneto."
+                ogDescription="Dal 2023 nella sicurezza sul lavoro. Formazione in collaborazione con un Ente Accreditato in Regione. 300+ aziende servite a Padova e Veneto."
                 structuredData={structuredData}
             />
 
@@ -104,11 +103,7 @@ const ChiSiamoStaticPage: React.FC = () => {
                             </p>
                             <div className="flex items-center gap-3 text-primary-600 font-semibold">
                                 <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
-                                Ente accreditato dalla Regione Veneto per la formazione professionale
-                            </div>
-                            <div className="flex items-center gap-3 text-primary-600 font-semibold mt-2">
-                                <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
-                                Certificazione ISO 9001:2015 in iter per il sistema di gestione della qualità
+                                In collaborazione con un Ente Accreditato dalla Regione Veneto per la formazione professionale
                             </div>
                         </div>
                         <div className="bg-gray-50 rounded-2xl p-8 border border-gray-100">
@@ -145,7 +140,7 @@ const ChiSiamoStaticPage: React.FC = () => {
                     <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
                         {[
                             { icon: Shield, title: 'Professionalità', desc: 'Ogni consulente è qualificato, aggiornato e opera con rigore metodologico.' },
-                            { icon: Award, title: 'Qualità in Iter', desc: 'ISO 9001:2015 e accreditamento regionale in iter di certificazione. Già qualificati D.I. 6 Marzo 2013.' },
+                            { icon: Award, title: 'Qualità e Conformità', desc: 'Formazione erogata in collaborazione con un Ente Accreditato in Regione. Docenti qualificati ai criteri del D.I. 6 Marzo 2013.' },
                             { icon: Heart, title: 'Cura del Cliente', desc: 'Ascoltiamo le esigenze di ciascuna azienda e costruiamo soluzioni personalizzate.' },
                             { icon: TrendingUp, title: 'Innovazione', desc: 'Piattaforme digitali, e-learning e strumenti avanzati per semplificare la conformità.' },
                         ].map((v, i) => (
@@ -171,7 +166,7 @@ const ChiSiamoStaticPage: React.FC = () => {
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
                         {[
                             { role: 'RSPP Responsabili', icon: Shield, color: 'blue', desc: 'Professionisti qualificati per tutti i 9 macrosettori ATECO, con esperienza in aziende di ogni dimensione e settore.', skills: ['D.Lgs 81/08', 'DVR', 'Sopralluoghi'] },
-                            { role: 'Formatori Sicurezza', icon: GraduationCap, color: 'primary', desc: 'Docenti con qualifica ai criteri del D.I. 6 Marzo 2013. Specializzati in formazione generale, specifica, antincendio e primo soccorso.', skills: ['D.Lgs 81/08', 'ISO 9001', 'Accordo Stato-Regioni'] },
+                            { role: 'Formatori Sicurezza', icon: GraduationCap, color: 'primary', desc: 'Docenti con qualifica ai criteri del D.I. 6 Marzo 2013. Specializzati in formazione generale, specifica, antincendio e primo soccorso.', skills: ['D.Lgs 81/08', 'D.I. 6 Marzo 2013', 'Accordo Stato-Regioni'] },
                             { role: 'Medici del Lavoro', icon: Stethoscope, color: 'teal', desc: 'Medici competenti iscritti all\'albo dei medici del lavoro. Sorveglianza sanitaria, protocolli personalizzati, visite in azienda.', skills: ['Sorveglianza sanitaria', 'DVR', 'Giudizi idoneità'] },
                             { role: 'Consulenti Normativi', icon: FileCheck, color: 'green', desc: 'Esperti in legislazione e normative di sicurezza. Aggiornamenti costanti su circolari, linee guida e prassi di riferimento.', skills: ['Normativa', 'Audit', 'Compliance'] },
                             { role: 'Assistenti Amministrativi', icon: Users, color: 'violet', desc: 'Gestione pratiche, scadenze, attestati e documentazione digitale. Supporto rapido e professionale per ogni esigenza.', skills: ['Gestione scadenze', 'Attestati digitali', 'Supporto'] },
@@ -229,22 +224,13 @@ const ChiSiamoStaticPage: React.FC = () => {
                     <div className="grid md:grid-cols-2 gap-6">
                         {[
                             {
-                                icon: Award,
-                                color: 'yellow',
-                                title: 'ISO 9001:2015',
-                                subtitle: 'In fase di richiesta',
-                                badge: 'In iter',
-                                badgeColor: 'amber',
-                                desc: 'Stiamo completando il percorso di certificazione del sistema di gestione qualità secondo la norma ISO 9001:2015. Un impegno formale verso la qualità e il miglioramento continuo.',
-                            },
-                            {
                                 icon: CheckCircle,
                                 color: 'green',
-                                title: 'Accreditamento Regionale',
-                                subtitle: 'In fase di richiesta – Regione Veneto',
-                                badge: 'In iter',
-                                badgeColor: 'amber',
-                                desc: 'Stiamo completando il percorso di accreditamento regionale per la formazione professionale. Gli attestati sono attualmente validi ai sensi del D.Lgs 81/08 con docenti qualificati.',
+                                title: 'Collaborazione con Ente Accreditato in Regione',
+                                subtitle: 'Formazione professionale – Regione Veneto',
+                                badge: 'Attivo',
+                                badgeColor: 'green',
+                                desc: 'Eroghiamo la formazione professionale in collaborazione con un Ente Accreditato dalla Regione Veneto. Gli attestati sono validi ai sensi del D.Lgs 81/08 con docenti qualificati.',
                             },
                             {
                                 icon: Shield,
@@ -294,12 +280,12 @@ const ChiSiamoStaticPage: React.FC = () => {
                         <h2 className="text-3xl font-bold text-gray-900 mb-3">Le Nostre Collaborazioni</h2>
                         <p className="text-gray-600 max-w-2xl mx-auto">Collaboriamo con le principali associazioni datoriali del territorio per portare sicurezza e formazione alle imprese associate</p>
                     </div>
-                    <div className="grid md:grid-cols-2 gap-8 mb-10">
-                        <a href="https://www.confisipadova.it" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-4 p-8 bg-white rounded-2xl border border-gray-100 hover:border-primary-200 hover:shadow-md transition-all no-underline">
+                    <div className="grid md:grid-cols-2 gap-8">
+                        <a href="https://www.ascompd.com/" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-4 p-8 bg-white rounded-2xl border border-gray-100 hover:border-primary-200 hover:shadow-md transition-all no-underline">
                             <img
-                                src="/assets/logos/confisi-logo.png"
+                                src="/assets/logos/confcommercio-padova-logo.png"
                                 style={{ background: 'transparent' }}
-                                alt="CONFISI – Confederazione Italiana Sviluppo Imprese"
+                                alt="Confcommercio Padova"
                                 className="h-20 w-auto max-w-full object-contain"
                                 onError={(e) => {
                                     const el = e.currentTarget as HTMLImageElement;
@@ -309,12 +295,12 @@ const ChiSiamoStaticPage: React.FC = () => {
                                 }}
                             />
                             <div style={{ display: 'none' }} className="flex-col items-center gap-1" aria-hidden="true">
-                                <div className="text-2xl font-black text-gray-900">CONFISI</div>
-                                <div className="text-xs text-gray-500 text-center">CONFEDERAZIONE ITALIANA SVILUPPO IMPRESE</div>
+                                <div className="text-2xl font-black text-blue-900">Confcommercio</div>
+                                <div className="text-sm font-semibold text-blue-700">PADOVA</div>
                             </div>
                             <div className="text-center">
-                                <h3 className="font-bold text-gray-900">CONFISI</h3>
-                                <p className="text-sm text-gray-600 mt-1">Confederazione Italiana Sviluppo Imprese — Offriamo formazione sicurezza e RSPP esterno alle aziende associate a condizioni dedicate.</p>
+                                <h3 className="font-bold text-gray-900">Confcommercio Padova</h3>
+                                <p className="text-sm text-gray-600 mt-1">Partner per i servizi di formazione sicurezza e consulenza RSPP alle imprese del commercio, turismo e servizi del territorio padovano.</p>
                             </div>
                         </a>
                         <a href="https://www.confartigianatopadova.it" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-4 p-8 bg-white rounded-2xl border border-gray-100 hover:border-primary-200 hover:shadow-md transition-all no-underline">
@@ -338,9 +324,29 @@ const ChiSiamoStaticPage: React.FC = () => {
                                 <p className="text-sm text-gray-600 mt-1">Partner per i servizi di formazione sicurezza e consulenza RSPP alle imprese artigiane del territorio padovano.</p>
                             </div>
                         </a>
-                    </div>
-                    <div className="mt-8 flex justify-center">
-                        <a href="https://www.fimiebap.it/" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-4 p-8 bg-white rounded-2xl border border-gray-100 hover:border-primary-200 hover:shadow-md transition-all no-underline w-full max-w-lg">
+                        <a href="https://www.confisipadova.it" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-4 p-8 bg-white rounded-2xl border border-gray-100 hover:border-primary-200 hover:shadow-md transition-all no-underline">
+                            <img
+                                src="/assets/logos/confisi-logo.png"
+                                style={{ background: 'transparent' }}
+                                alt="CONFISI – Confederazione Italiana Sviluppo Imprese"
+                                className="h-20 w-auto max-w-full object-contain"
+                                onError={(e) => {
+                                    const el = e.currentTarget as HTMLImageElement;
+                                    el.style.display = 'none';
+                                    const next = el.nextElementSibling as HTMLElement | null;
+                                    if (next) next.style.display = 'flex';
+                                }}
+                            />
+                            <div style={{ display: 'none' }} className="flex-col items-center gap-1" aria-hidden="true">
+                                <div className="text-2xl font-black text-gray-900">CONFISI</div>
+                                <div className="text-xs text-gray-500 text-center">CONFEDERAZIONE ITALIANA SVILUPPO IMPRESE</div>
+                            </div>
+                            <div className="text-center">
+                                <h3 className="font-bold text-gray-900">CONFISI</h3>
+                                <p className="text-sm text-gray-600 mt-1">Confederazione Italiana Sviluppo Imprese — Offriamo formazione sicurezza e RSPP esterno alle aziende associate a condizioni dedicate.</p>
+                            </div>
+                        </a>
+                        <a href="https://www.fimiebap.it/" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-4 p-8 bg-white rounded-2xl border border-gray-100 hover:border-primary-200 hover:shadow-md transition-all no-underline">
                             <img
                                 src="/assets/logos/fimi-ebap-logo.jpg"
                                 alt="FIMI/EBAP – Ente Bilaterale per l'Agricoltura Padovana"
