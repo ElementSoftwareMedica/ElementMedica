@@ -46,6 +46,7 @@ import {
 import { formatDate } from '../../utils/dateUtils';
 import { formatCurrency } from '../../utils/formatters';
 import { cn } from '../../design-system/utils';
+import { useBranchContextOptional } from '../../contexts/BranchContext';
 import OT23CreateModal from '../../pages/sicurezza/components/OT23CreateModal';
 
 interface OT23CardProps {
@@ -108,8 +109,15 @@ const OT23Card: React.FC<OT23CardProps> = ({
     const navigate = useNavigate();
     const location = useLocation();
     const { showToast } = useToast();
-    // Se siamo dentro il layout medica (/poliambulatorio/), usa le route OT23 sotto di esso
-    const ot23BasePath = location.pathname.startsWith('/poliambulatorio')
+    const branchContext = useBranchContextOptional();
+    // La pagina OT23 deve restare nel branch da cui è aperta (rispetto provenienza, regola #36):
+    // - branch MEDICA (dominio elementmedica) → route OT23 sotto /poliambulatorio (layout teal)
+    // - branch FORMAZIONE/sicurezza → route OT23 standalone (layout sicurezza)
+    // Si usa il branch corrente come segnale primario, con fallback sul path per sicurezza.
+    const isMedicaContext = branchContext
+        ? branchContext.currentBranch === 'MEDICA'
+        : location.pathname.startsWith('/poliambulatorio');
+    const ot23BasePath = isMedicaContext
         ? '/poliambulatorio/sicurezza/ot23'
         : '/sicurezza/ot23';
 

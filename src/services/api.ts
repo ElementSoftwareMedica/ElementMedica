@@ -687,6 +687,27 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // 401: l'access token (in-memory, breve durata) è scaduto.
+    // Tenta UN refresh tramite il refresh token e ritenta la richiesta originale una sola volta.
+    // I refresh concorrenti sono deduplicati da refreshAccessToken (isRefreshing/refreshPromise).
+    if (status === 401 && config && !config._retry) {
+      const unauthenticatedAuthPaths = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/forgot-password', '/auth/reset-password'];
+      const isUnauthenticatedAuthUrl = unauthenticatedAuthPaths.some(p => (config.url || '').includes(p));
+      if (!isUnauthenticatedAuthUrl) {
+        config._retry = true;
+        try {
+          const newToken = await refreshAccessToken();
+          if (newToken) {
+            config.headers = (config.headers || {}) as Record<string, string>;
+            config.headers['Authorization'] = `Bearer ${newToken}`;
+            return apiClient(config as Parameters<typeof apiClient>[0]);
+          }
+        } catch {
+          // refresh fallito → prosegui col reject sotto
+        }
+      }
+    }
+
     // Evita side effects su auth per errori generici
     return Promise.reject(error);
   }

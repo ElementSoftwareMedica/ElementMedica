@@ -162,6 +162,13 @@ export interface GDPREntityTemplateProps<T extends Record<string, any> & { id: s
     /** Invocato con gli ID correntemente selezionati */
     onClick: (selectedIds: string[]) => void;
   }>;
+
+  /**
+   * Contenuto extra renderizzato nella stessa riga della toolbar (dopo
+   * ricerca / filtri / colonne), così filtri specifici della pagina possono
+   * convivere con i controlli standard in un'unica riga organizzata.
+   */
+  extraToolbarContent?: React.ReactNode;
 }
 
 export function GDPREntityTemplate<T extends Record<string, any> & { id: string }>({
@@ -200,6 +207,7 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
   pageSubtitle,
   theme = 'blue',
   customBulkActions = [],
+  extraToolbarContent,
 }: GDPREntityTemplateProps<T>): JSX.Element {
   const navigate = useNavigate();
   const basePath = entityBasePath || `/${entityNamePlural}`;
@@ -1029,6 +1037,9 @@ export function GDPREntityTemplate<T extends Record<string, any> & { id: string 
               Rimuovi filtri ({Object.keys(activeFilters).filter(k => activeFilters[k]).length})
             </button>
           )}
+
+          {/* Filtri specifici della pagina (es. filtro Corsi su /employees) */}
+          {extraToolbarContent}
         </div>
 
         {/* ── Error alert ── */}

@@ -103,8 +103,7 @@ import type {
     DragItem,
     ViewType,
     ZoomMode,
-    ColorScheme,
-    ColorMode
+    ColorScheme
 } from './types';
 
 // Constants from centralized module
@@ -121,7 +120,6 @@ import {
     MONTHS,
     STATO_COLORS,
     MEDICO_COLORS,
-    AMBULATORIO_COLORS,
     CALENDAR_SETTINGS_KEY
 } from './constants';
 
@@ -229,7 +227,6 @@ export const CalendarioPage: React.FC = () => {
     const [selectedMedico, setSelectedMedico] = useState<string | null>(null);
     const [filterMedici, setFilterMedici] = useState<string[]>(savedSettings.filterMedici || []); // Multi-select filter for viewing doctors
     const [selectedDays, setSelectedDays] = useState<number[]>(savedSettings.selectedDays || [1, 2, 3, 4, 5]); // Mon-Fri default
-    const [colorMode, setColorMode] = useState<ColorMode>('medico'); // Color by medico or ambulatorio
 
     // New feature states
     const [showOnlyAvailability, setShowOnlyAvailability] = useState<boolean>(savedSettings.showOnlyAvailability || false); // Filter to show only columns with availability
@@ -649,22 +646,10 @@ export const CalendarioPage: React.FC = () => {
         return map;
     }, [visibleMedici]);
 
-    // Assign colors to ambulatori
-    const ambulatorioColors = useMemo(() => {
-        const map = new Map<string, typeof AMBULATORIO_COLORS[0]>();
-        ambulatoriData?.data?.forEach((amb, i) => {
-            map.set(amb.id, AMBULATORIO_COLORS[i % AMBULATORIO_COLORS.length]);
-        });
-        return map;
-    }, [ambulatoriData]);
-
-    // Get color for a slot based on current color mode
-    const getSlotColor = useCallback((medicoId?: string, ambulatorioId?: string) => {
-        if (colorMode === 'ambulatorio' && ambulatorioId) {
-            return ambulatorioColors.get(ambulatorioId) || AMBULATORIO_COLORS[0];
-        }
+    // Get color for a slot — la colorazione è sempre per medico (toggle colore rimosso)
+    const getSlotColor = useCallback((medicoId?: string, _ambulatorioId?: string) => {
         return medicoColors.get(medicoId || '') || MEDICO_COLORS[0];
-    }, [colorMode, medicoColors, ambulatorioColors]);
+    }, [medicoColors]);
 
     // Transform data to calendar events
     const events = useMemo(() => {
@@ -1782,26 +1767,6 @@ export const CalendarioPage: React.FC = () => {
                             </button>
                         </div>
 
-                        {/* Color Mode Toggle */}
-                        <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-                            <button
-                                onClick={() => setColorMode('medico')}
-                                className={`px-3 py-1.5 text-sm font-medium rounded flex items-center gap-1.5 ${colorMode === 'medico' ? 'bg-white dark:bg-gray-600 shadow text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
-                                title="Colora per medico"
-                            >
-                                <Stethoscope className="h-4 w-4" />
-                                <span className="hidden md:inline">Medico</span>
-                            </button>
-                            <button
-                                onClick={() => setColorMode('ambulatorio')}
-                                className={`px-3 py-1.5 text-sm font-medium rounded flex items-center gap-1.5 ${colorMode === 'ambulatorio' ? 'bg-white dark:bg-gray-600 shadow text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
-                                title="Colora per ambulatorio"
-                            >
-                                <Building2 className="h-4 w-4" />
-                                <span className="hidden md:inline">Ambulatorio</span>
-                            </button>
-                        </div>
-
                         {/* Show Only Availability Toggle */}
                         <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
                             <button
@@ -1888,33 +1853,16 @@ export const CalendarioPage: React.FC = () => {
                         ))}
                     </div>
                     <div className="border-l border-gray-300 dark:border-gray-600 pl-4 ml-2">
-                        {colorMode === 'medico' ? (
-                            <>
-                                <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mr-2">Medici:</span>
-                                {Array.from(medicoColors.entries()).slice(0, 4).map(([id, color]) => {
-                                    const medico = visibleMedici.find(m => m.id === id);
-                                    return (
-                                        <span key={id} className="inline-flex items-center gap-1 mr-3 text-xs">
-                                            <div className={`w-2.5 h-2.5 rounded-full ${color.dot}`} />
-                                            <span className="text-gray-600 dark:text-gray-400">{medico?.lastName || medico?.cognome}</span>
-                                        </span>
-                                    );
-                                })}
-                            </>
-                        ) : (
-                            <>
-                                <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mr-2">Ambulatori:</span>
-                                {Array.from(ambulatorioColors.entries()).slice(0, 4).map(([id, color]) => {
-                                    const amb = ambulatoriData?.data?.find(a => a.id === id);
-                                    return (
-                                        <span key={id} className="inline-flex items-center gap-1 mr-3 text-xs">
-                                            <div className={`w-2.5 h-2.5 rounded-full ${color.dot}`} />
-                                            <span className="text-gray-600 dark:text-gray-400">{amb?.nome}</span>
-                                        </span>
-                                    );
-                                })}
-                            </>
-                        )}
+                        <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mr-2">Medici:</span>
+                        {Array.from(medicoColors.entries()).slice(0, 4).map(([id, color]) => {
+                            const medico = visibleMedici.find(m => m.id === id);
+                            return (
+                                <span key={id} className="inline-flex items-center gap-1 mr-3 text-xs">
+                                    <div className={`w-2.5 h-2.5 rounded-full ${color.dot}`} />
+                                    <span className="text-gray-600 dark:text-gray-400">{medico?.lastName || medico?.cognome}</span>
+                                </span>
+                            );
+                        })}
                     </div>
                 </div>
             </div>

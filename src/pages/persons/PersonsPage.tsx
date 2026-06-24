@@ -621,53 +621,54 @@ export const PersonsPage: React.FC<PersonsPageProps> = ({
 
   const activeCourseFilterCount = (corsoCategoria ? 1 : 0) + (corsoRange.start || corsoRange.end ? 1 : 0);
 
+  // Filtro Corsi (solo employees) integrato nella toolbar del template GDPR,
+  // così la pagina /employees ha i filtri organizzati su un'unica riga come /pazienti,
+  // mantenendo comunque il dropdown "Aggiungi Dipendente" nell'header del template.
+  const corsoFilterContent = filterType === 'employees' ? (
+    <div className="flex flex-wrap items-center gap-2 pl-2 ml-1 border-l border-gray-200 dark:border-gray-700">
+      <div className="flex items-center gap-1.5 text-sm font-medium text-gray-500 dark:text-gray-400 shrink-0">
+        <BookOpen className="w-4 h-4" />
+        Corsi
+      </div>
+
+      {/* Categoria corso */}
+      <input
+        type="text"
+        placeholder="Tipo corso (es. Antincendio)..."
+        value={corsoCategoria}
+        onChange={e => setCorsoCategoria(e.target.value)}
+        className="h-9 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 w-48"
+      />
+
+      {/* Periodo corsi */}
+      <DateRangeCalendar
+        value={corsoRange}
+        onChange={setCorsoRange}
+        placeholder="Periodo corsi..."
+      />
+
+      {/* Reset filtri corsi */}
+      {activeCourseFilterCount > 0 && (
+        <button
+          type="button"
+          onClick={() => { setCorsoCategoria(''); setCorsoRange({ start: null, end: null }); }}
+          className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-600 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+        >
+          <X className="w-3.5 h-3.5" />
+          Reset
+          <span className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+            {activeCourseFilterCount}
+          </span>
+        </button>
+      )}
+    </div>
+  ) : undefined;
+
   return (
     <>
-      {/* Filtri corsi (solo employees) */}
-      {filterType === 'employees' && (
-        <div className="px-4 pt-4 pb-0 max-w-screen-xl mx-auto">
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm px-4 py-3 flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400 shrink-0">
-              <BookOpen className="w-4 h-4" />
-              Corsi
-            </div>
-
-            {/* Categoria corso */}
-            <input
-              type="text"
-              placeholder="Tipo corso (es. Antincendio)..."
-              value={corsoCategoria}
-              onChange={e => setCorsoCategoria(e.target.value)}
-              className="h-9 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 w-52"
-            />
-
-            {/* Periodo corsi */}
-            <DateRangeCalendar
-              value={corsoRange}
-              onChange={setCorsoRange}
-              placeholder="Periodo corsi..."
-            />
-
-            {/* Reset filtri corsi */}
-            {activeCourseFilterCount > 0 && (
-              <button
-                type="button"
-                onClick={() => { setCorsoCategoria(''); setCorsoRange({ start: null, end: null }); }}
-                className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-600 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                <X className="w-3.5 h-3.5" />
-                Reset
-                <span className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-bold">
-                  {activeCourseFilterCount}
-                </span>
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Template GDPR */}
       <GDPREntityTemplate<Person>
+        extraToolbarContent={corsoFilterContent}
         key={refreshKey} // Forza re-mount quando refreshKey cambia
         refreshTrigger={courseRefreshTrigger}
         entityName={gdprConfig.entityType}

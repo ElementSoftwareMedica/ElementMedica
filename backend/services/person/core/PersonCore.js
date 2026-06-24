@@ -1311,7 +1311,11 @@ class PersonCore {
         sortBy = 'lastLogin',
         sortOrder = 'desc',
         page = 1,
-        limit = 50
+        limit = 50,
+        // Filtro corsi (categoria/titolo + intervallo date dello schedule)
+        corsoCategoria,
+        corsoPeriodoStart,
+        corsoPeriodoEnd
       } = options;
 
       const where = {
@@ -1528,6 +1532,43 @@ class PersonCore {
           // P48: cerca email in tenantProfiles
           { tenantProfiles: { some: { email: { contains: search, mode: 'insensitive' }, deletedAt: null } } }
         ];
+      }
+
+      // Filtro corsi: restituisce le persone che hanno effettuato (iscritte a) corsi
+      // corrispondenti per categoria/titolo e/o svolti nell'intervallo di date indicato.
+      // Il filtro è ANDed con le altre condizioni (ruolo/tenant/ricerca).
+      if (corsoCategoria || corsoPeriodoStart || corsoPeriodoEnd) {
+        const scheduleFilter = {};
+        if (corsoCategoria) {
+          // L'utente digita testo libero (es. "Antincendio"): match su categoria O titolo
+          scheduleFilter.course = {
+            OR: [
+              { category: { contains: corsoCategoria, mode: 'insensitive' } },
+              { title: { contains: corsoCategoria, mode: 'insensitive' } }
+            ]
+          };
+        }
+        if (corsoPeriodoStart || corsoPeriodoEnd) {
+          const dateFilter = {};
+          if (corsoPeriodoStart) {
+            const start = new Date(corsoPeriodoStart);
+            if (!isNaN(start.getTime())) dateFilter.gte = start;
+          }
+          if (corsoPeriodoEnd) {
+            const end = new Date(corsoPeriodoEnd);
+            if (!isNaN(end.getTime())) {
+              end.setHours(23, 59, 59, 999);
+              dateFilter.lte = end;
+            }
+          }
+          if (Object.keys(dateFilter).length > 0) scheduleFilter.startDate = dateFilter;
+        }
+        where.courseEnrollments = {
+          some: {
+            deletedAt: null,
+            ...(Object.keys(scheduleFilter).length > 0 ? { schedule: scheduleFilter } : {})
+          }
+        };
       }
 
       const skip = (parseInt(page) - 1) * parseInt(limit);

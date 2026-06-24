@@ -173,6 +173,10 @@ const PazientiPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    // Quando la ricerca è attiva (focus o testo presente) gli altri filtri vengono collassati
+    // così la searchbar può espandersi a tutta larghezza e mostrare bene il testo digitato.
+    const [searchFocused, setSearchFocused] = useState(false);
+    const searchActive = searchFocused || searchTerm.length > 0;
     const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 0 });
     const [stats, setStats] = useState({ total: 0, conVisite: 0, conContatto: 0 });
 
@@ -447,8 +451,10 @@ const PazientiPage: React.FC = () => {
 
             {/* Filters */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-3">
-                {/* Row 1: Search + Periodo + Filters + Columns */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto_auto_auto] gap-3">
+                {/* Row 1: Search + Periodo + Filters + Columns.
+                    Quando la ricerca è attiva il grid collassa a [1fr auto] e gli altri
+                    filtri vengono nascosti, lasciando la searchbar a tutta larghezza. */}
+                <div className={`grid grid-cols-1 gap-3 ${searchActive ? 'lg:grid-cols-[1fr_auto]' : 'md:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto_auto_auto]'}`}>
                     {/* Search */}
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -457,7 +463,9 @@ const PazientiPage: React.FC = () => {
                             placeholder="Cerca per nome, CF, email..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl bg-gradient-to-r from-white to-gray-50 shadow-sm hover:border-teal-400 hover:shadow-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:ring-offset-1 text-sm h-10 transition-all duration-300"
+                            onFocus={() => setSearchFocused(true)}
+                            onBlur={() => setSearchFocused(false)}
+                            className="w-full pl-10 pr-10 py-2 border border-gray-200 rounded-xl bg-gradient-to-r from-white to-gray-50 shadow-sm hover:border-teal-400 hover:shadow-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:ring-offset-1 text-sm text-gray-900 placeholder-gray-400 h-10 transition-all duration-300"
                         />
                         {searchTerm && (
                             <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -467,7 +475,7 @@ const PazientiPage: React.FC = () => {
                     </div>
 
                     {/* Periodo */}
-                    <DateRangeCalendar
+                    {!searchActive && <DateRangeCalendar
                         value={periodoRange ?? { start: new Date(), end: new Date() }}
                         onChange={(range) => setPeriodoRange(range.start ? range : null)}
                         placeholder="Periodo visita/app."
@@ -475,9 +483,10 @@ const PazientiPage: React.FC = () => {
                         size="md"
                         clearable
                         showPresets
-                    />
+                    />}
 
                     {/* Role filter */}
+                    {!searchActive && (
                     <div className="relative">
                         <UserCog className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
                         <select
@@ -490,8 +499,10 @@ const PazientiPage: React.FC = () => {
                             <option value="PAZIENTE_SOLO">Solo pazienti</option>
                         </select>
                     </div>
+                    )}
 
                     {/* Company filter */}
+                    {!searchActive && (
                     <div className="relative">
                         <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
                         <select
@@ -505,8 +516,10 @@ const PazientiPage: React.FC = () => {
                             ))}
                         </select>
                     </div>
+                    )}
 
                     {/* Branca specialistica */}
+                    {!searchActive && (
                     <div className="relative">
                         <Stethoscope className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
                         <select
@@ -520,6 +533,7 @@ const PazientiPage: React.FC = () => {
                             ))}
                         </select>
                     </div>
+                    )}
 
                     {/* Controls: Columns + Reset */}
                     <div className="flex items-center gap-2">

@@ -1445,7 +1445,10 @@ class PersonController {
         includeWithoutRoles,
         sortBy = 'lastLogin',
         sortOrder = 'desc',
-        isActive
+        isActive,
+        corsoCategoria,
+        corsoPeriodoStart,
+        corsoPeriodoEnd
       } = req.query;
 
       const personId = req.person?.id;
@@ -1494,7 +1497,12 @@ class PersonController {
         sortBy,
         sortOrder,
         page: parseInt(page),
-        limit: parseInt(limit)
+        limit: parseInt(limit),
+        // Filtro corsi: restituisce solo le persone che hanno effettuato corsi
+        // corrispondenti (categoria/titolo) e/o svolti nell'intervallo indicato
+        corsoCategoria,
+        corsoPeriodoStart,
+        corsoPeriodoEnd
       };
 
       if (typeof isActive !== 'undefined') {

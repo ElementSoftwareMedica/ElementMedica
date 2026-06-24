@@ -7,7 +7,7 @@
  * @module pages/clinica/agenda/components/blocks
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
     GripVertical,
@@ -122,57 +122,39 @@ export const DisponibilitaBlock: React.FC<DisponibilitaBlockProps> = ({
     // EFFECTS
     // ============================================
 
-    // Update grip position when block renders/moves
+    // Recompute the grip position from the block's real on-screen rect.
+    // Guarded by lastGripPositionRef so re-render loops are avoided (no setState if <1px change).
+    const updateGripPosition = useCallback(() => {
+        if (blockRef.current) {
+            const rect = blockRef.current.getBoundingClientRect();
+            const newX = Math.round(rect.left + 2);
+            const newY = Math.round(rect.top + 2);
+
+            const last = lastGripPositionRef.current;
+            if (!last || Math.abs(last.x - newX) > 1 || Math.abs(last.y - newY) > 1) {
+                lastGripPositionRef.current = { x: newX, y: newY };
+                setGripPosition({ x: newX, y: newY, visible: true });
+            }
+        }
+    }, []);
+
+    // Sync the grip on EVERY render, synchronously before paint.
+    // This keeps the grip locked to the block when the calendar re-lays-out on a
+    // day/view change (the block shifts horizontally without `top`/`height`/`slot.*`
+    // changing, so a dependency-gated effect would lag behind until the next scroll).
+    useLayoutEffect(() => {
+        updateGripPosition();
+    });
+
+    // Re-update on scroll/resize (listeners attached once).
     useEffect(() => {
-        let rafId: number | null = null;
-        let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-        const updateGripPosition = () => {
-            if (blockRef.current) {
-                const rect = blockRef.current.getBoundingClientRect();
-                const newX = Math.round(rect.left + 2);
-                const newY = Math.round(rect.top + 2);
-
-                // Only update if position actually changed (avoid loop)
-                const last = lastGripPositionRef.current;
-                if (!last || Math.abs(last.x - newX) > 1 || Math.abs(last.y - newY) > 1) {
-                    lastGripPositionRef.current = { x: newX, y: newY };
-                    setGripPosition({ x: newX, y: newY, visible: true });
-                }
-            }
-        };
-
-        // Use requestAnimationFrame to ensure DOM has been updated
-        const scheduleUpdate = () => {
-            if (rafId !== null) {
-                cancelAnimationFrame(rafId);
-            }
-            rafId = requestAnimationFrame(() => {
-                updateGripPosition();
-                // Single delayed check for layout shifts
-                if (timeoutId) clearTimeout(timeoutId);
-                timeoutId = setTimeout(updateGripPosition, 100);
-            });
-        };
-
-        // Initial update with RAF
-        scheduleUpdate();
-
-        // Re-update on scroll/resize
         window.addEventListener('scroll', updateGripPosition, true);
         window.addEventListener('resize', updateGripPosition);
-
         return () => {
-            if (rafId !== null) {
-                cancelAnimationFrame(rafId);
-            }
-            if (timeoutId) {
-                clearTimeout(timeoutId);
-            }
             window.removeEventListener('scroll', updateGripPosition, true);
             window.removeEventListener('resize', updateGripPosition);
         };
-    }, [viewStartHour, viewEndHour, hourHeight, slot.id, top, height, slot.start.getTime(), slot.end.getTime()]);
+    }, [updateGripPosition]);
 
     // Cleanup timeout on unmount
     useEffect(() => {
