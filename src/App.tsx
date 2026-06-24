@@ -81,7 +81,9 @@ import QuotesAndInvoicesLazy from './pages/QuotesAndInvoices.lazy';
 import { DocumentsCorsi as DocumentsCorsiLazy } from './pages/DocumentsCorsi.lazy';
 
 // GDPR
-import GDPRDashboardLazy from './pages/GDPRDashboard.lazy';
+// GDPR - pagine self-service (design-system), sostituiscono il vecchio GDPRDashboard
+const GDPRConsentPageLazy = React.lazy(() => import('./pages/management/gdpr/GDPRConsentPage'));
+const GDPRAuditPageLazy = React.lazy(() => import('./pages/management/gdpr/GDPRAuditPage'));
 import AdminGDPRLazy from './pages/AdminGDPR.lazy';
 
 // Project 43 - Management Page
@@ -618,12 +620,12 @@ function App() {
                 } />
                 <Route path="/gdpr" element={
                   <Layout>
-                    <GDPRDashboardLazy />
+                    <GDPRConsentPageLazy />
                   </Layout>
                 } />
                 <Route path="/gdpr/audit" element={
                   <Layout>
-                    <GDPRDashboardLazy />
+                    <GDPRAuditPageLazy />
                   </Layout>
                 } />
                 <Route path="/admin/gdpr" element={

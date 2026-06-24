@@ -353,6 +353,59 @@ router.put('/me/privacy-settings',
   }
 );
 
+// POST /api/persons/me/privacy-settings/reset - Ripristina privacy settings ai default
+router.post('/me/privacy-settings/reset',
+  authenticateToken,
+  auditLog('RESET_PRIVACY_SETTINGS'),
+  async (req, res) => {
+    try {
+      const personId = req.person?.personId || req.person?.id;
+
+      if (!personId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated'
+        });
+      }
+
+      // Default privacy settings (coerenti con GET /me/privacy-settings)
+      const settings = {
+        id: personId,
+        userId: personId,
+        dataProcessingConsent: true,
+        marketingConsent: false,
+        analyticsConsent: true,
+        profileVisibility: 'private',
+        dataRetentionOptOut: false,
+        thirdPartySharing: false,
+        emailNotifications: true,
+        marketingEmails: false,
+        analyticsTracking: false,
+        dataRetentionPeriod: 365,
+        autoDeleteInactive: false,
+        twoFactorAuth: false,
+        sessionTimeout: 30,
+        updatedAt: new Date().toISOString()
+      };
+
+      res.json({
+        success: true,
+        data: { settings },
+        message: 'Privacy settings reset to defaults'
+      });
+    } catch (error) {
+      logger.error('Failed to reset privacy settings', {
+        error: 'Operazione non riuscita',
+        personId: req.person?.personId || req.person?.id
+      });
+      res.status(500).json({
+        success: false,
+        error: 'Errore nel ripristino'
+      });
+    }
+  }
+);
+
 // DELETE /api/persons/bulk - Elimina più persone
 router.delete('/bulk',
   authenticateToken,

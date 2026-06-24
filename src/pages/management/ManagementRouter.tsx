@@ -35,7 +35,10 @@ const RoleDetailPage = lazy(() => import('./roles/RoleDetailPage'));
 const CMSHub = lazy(() => import('../cms/CMSHub'));
 const CMSManager = lazy(() => import('../cms/CMSManager'));
 const MediaLibrary = lazy(() => import('../cms/MediaLibrary'));
-const GDPRDashboard = lazy(() => import('../GDPRDashboard').then(m => ({ default: m.GDPRDashboard })));
+// GDPR - 3 pagine separate (design-system), sostituiscono il vecchio GDPRDashboard a tab
+const GDPRConsentPage = lazy(() => import('./gdpr/GDPRConsentPage'));
+const GDPRExportPage = lazy(() => import('./gdpr/GDPRExportPage'));
+const GDPRAuditPage = lazy(() => import('./gdpr/GDPRAuditPage'));
 
 // CMS Form Templates - detail/edit routes (inside Management context)
 const FormTemplateView = lazy(() => import('../forms/FormTemplateView'));
@@ -169,11 +172,11 @@ const ManagementRouter: React.FC = () => {
                 <Route path="cms/forms/templates/:id" element={<FormTemplateView />} />
                 <Route path="cms/*" element={<CMSHub />} />
 
-                {/* GDPR - Use existing GDPRDashboard */}
-                <Route path="gdpr" element={<GDPRDashboard />} />
-                <Route path="gdpr/audit" element={<GDPRDashboard />} />
-                <Route path="gdpr/export" element={<GDPRDashboard />} />
-                <Route path="gdpr/consent" element={<GDPRDashboard />} />
+                {/* GDPR - 3 pagine separate (Consensi/Privacy, Export/Cancellazione, Audit) */}
+                <Route path="gdpr" element={<Navigate to="/management/gdpr/consent" replace />} />
+                <Route path="gdpr/consent" element={<GDPRConsentPage />} />
+                <Route path="gdpr/export" element={<GDPRExportPage />} />
+                <Route path="gdpr/audit" element={<GDPRAuditPage />} />
 
                 {/* System */}
                 <Route path="logs" element={<SystemLogsPage />} />

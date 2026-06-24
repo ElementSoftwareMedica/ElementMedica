@@ -30,8 +30,9 @@ export const useDeletionRequest = (): UseDeletionRequestReturn => {
       setLoading(true);
       setError(null);
 
+      // Self-service: solo le richieste dell'utente autenticato
       const data = await apiGet<GDPRApiResponse<{ requests: DeletionRequest[] }>>(
-        '/api/v1/gdpr/data-deletion/requests'
+        '/api/v1/gdpr/data-deletion/my-requests'
       );
 
       // Handle both wrapped and direct response formats

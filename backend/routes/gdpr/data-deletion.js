@@ -38,8 +38,11 @@ router.post('/request',
     deletionRequestLimiter,
     authenticateAdvanced,
     [
-        body('email').isEmail().normalizeEmail(),
-        body('reason').optional().isString().isLength({ max: 500 })
+        // Frontend invia `confirmEmail`; manteniamo retrocompatibilità con `email`
+        body('email').optional().isEmail().normalizeEmail(),
+        body('confirmEmail').optional().isEmail().normalizeEmail(),
+        body('reason').optional().isString().isLength({ max: 1000 }),
+        body('additionalInfo').optional({ nullable: true }).isString().isLength({ max: 1000 })
     ],
     async (req, res) => {
         try {
@@ -51,9 +54,17 @@ router.post('/request',
                 });
             }
 
-            const { email, reason } = req.body;
+            const email = req.body.email || req.body.confirmEmail;
+            const { reason, additionalInfo } = req.body;
             const personId = req.person.id;
             const tenantId = req.person.tenantId;
+
+            if (!email) {
+                return res.status(400).json({
+                    error: 'Email confirmation is required',
+                    code: 'GDPR_EMAIL_REQUIRED'
+                });
+            }
 
             // Verify email matches the authenticated user (P48: email is in tenantProfile)
             const userProfile = await prisma.personTenantProfile.findFirst({
@@ -91,6 +102,7 @@ router.post('/request',
             }
 
             // Create deletion request record in audit log
+            const requestDateIso = new Date().toISOString();
             const deletionRequest = await prisma.gdprAuditLog.create({
                 data: {
                     personId,
@@ -100,8 +112,9 @@ router.post('/request',
                     dataAccessed: {
                         email,
                         reason: reason || 'User requested account deletion',
+                        additionalInfo: additionalInfo || null,
                         status: 'pending',
-                        requestDate: new Date().toISOString()
+                        requestDate: requestDateIso
                     },
                     ipAddress: req.ip,
                     tenantId
@@ -116,10 +129,23 @@ router.post('/request',
                 requestId: deletionRequest.id
             });
 
+            // Shape allineata al frontend (UseDeletionRequestReturn / DeletionRequest)
             res.status(201).json({
+                success: true,
                 message: 'Data deletion request submitted successfully',
-                requestId: deletionRequest.id,
-                status: 'pending'
+                data: {
+                    request: {
+                        id: deletionRequest.id,
+                        userId: personId,
+                        reason: reason || 'User requested account deletion',
+                        confirmEmail: email,
+                        additionalInfo: additionalInfo || null,
+                        anonymize: false,
+                        status: 'pending',
+                        requestDate: deletionRequest.createdAt,
+                        processedDate: null
+                    }
+                }
             });
 
         } catch (error) {
@@ -388,6 +414,149 @@ router.get('/requests',
             res.status(500).json({
                 error: 'Errore nel recupero delle richieste di eliminazione',
                 code: 'GDPR_DELETION_REQUESTS_FAILED'
+            });
+        }
+    }
+);
+
+/**
+ * Get current user's own deletion requests (self-service)
+ * Owner-only: ritorna le richieste di cancellazione dell'utente autenticato
+ */
+router.get('/my-requests',
+    authenticateAdvanced,
+    async (req, res) => {
+        try {
+            const personId = req.person.id;
+            const tenantId = req.person.tenantId;
+
+            const rows = await prisma.gdprAuditLog.findMany({
+                where: {
+                    personId,
+                    action: 'DELETION_REQUESTED',
+                    tenantId
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+
+            const requests = rows.map(row => {
+                const data = row.dataAccessed || {};
+                return {
+                    id: row.id,
+                    userId: personId,
+                    reason: data.reason || '',
+                    confirmEmail: data.email || '',
+                    additionalInfo: data.additionalInfo || null,
+                    anonymize: false,
+                    status: data.status || 'pending',
+                    requestDate: row.createdAt,
+                    processedDate: data.processedDate || null,
+                    processedBy: data.processedBy || null,
+                    adminNotes: data.adminReason || null
+                };
+            });
+
+            res.json({
+                success: true,
+                data: { requests, total: requests.length }
+            });
+
+        } catch (error) {
+            logger.error('Failed to get own deletion requests', {
+                component: 'gdpr-data-deletion',
+                action: 'getMyDeletionRequests',
+                error: 'Operazione non riuscita',
+                personId: req.person?.id
+            });
+
+            res.status(500).json({
+                success: false,
+                error: 'Errore nel recupero delle richieste di eliminazione',
+                code: 'GDPR_DELETION_MY_REQUESTS_FAILED'
+            });
+        }
+    }
+);
+
+/**
+ * Cancel own pending deletion request (self-service)
+ * Owner-only: consente all'utente di annullare una richiesta ancora `pending`
+ */
+router.patch('/request/:requestId/cancel',
+    authenticateAdvanced,
+    [param('requestId').isString().notEmpty()],
+    async (req, res) => {
+        try {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) {
+                return res.status(400).json({
+                    error: 'Validation failed',
+                    details: errors.array()
+                });
+            }
+
+            const { requestId } = req.params;
+            const personId = req.person.id;
+
+            const row = await prisma.gdprAuditLog.findUnique({
+                where: { id: requestId }
+            });
+
+            if (!row || row.action !== 'DELETION_REQUESTED' || row.personId !== personId) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Deletion request not found',
+                    code: 'GDPR_DELETION_REQUEST_NOT_FOUND'
+                });
+            }
+
+            const data = row.dataAccessed || {};
+            if (data.status !== 'pending') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Only pending requests can be cancelled',
+                    code: 'GDPR_DELETION_NOT_PENDING'
+                });
+            }
+
+            const processedDate = new Date().toISOString();
+            await prisma.gdprAuditLog.update({
+                where: { id: requestId },
+                data: {
+                    dataAccessed: {
+                        ...data,
+                        status: 'cancelled',
+                        processedDate
+                    }
+                }
+            });
+
+            logger.info('GDPR deletion request cancelled by owner', {
+                component: 'gdpr-data-deletion',
+                action: 'cancelOwnDeletion',
+                requestId,
+                personId
+            });
+
+            res.json({
+                success: true,
+                message: 'Deletion request cancelled',
+                data: { id: requestId, status: 'cancelled', processedDate }
+            });
+
+        } catch (error) {
+            logger.error('Failed to cancel own deletion request', {
+                component: 'gdpr-data-deletion',
+                action: 'cancelOwnDeletion',
+                error: 'Operazione non riuscita',
+                requestId: req.params.requestId,
+                personId: req.person?.id
+            });
+
+            res.status(500).json({
+                success: false,
+                error: 'Errore nell\'annullamento della richiesta di eliminazione',
+                code: 'GDPR_DELETION_CANCEL_FAILED'
             });
         }
     }

@@ -371,6 +371,7 @@ export interface UseDataExportReturn {
   loading: boolean;
   error: string | null;
   requestExport: (data: DataExportFormData) => Promise<void>;
+  exportAndDownload: (format?: 'json' | 'csv') => Promise<void>;
   downloadExport: (requestId: string) => Promise<void>;
   cancelExport: (requestId: string) => Promise<void>;
   refreshRequests: () => Promise<void>;

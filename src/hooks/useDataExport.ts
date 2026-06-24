@@ -223,6 +223,50 @@ export const useDataExport = (): UseDataExportReturn => {
   }, []);
 
   /**
+   * Export and download user data in one step.
+   *
+   * Il backend (`POST /api/v1/gdpr/data-export`) genera ed invia il file
+   * direttamente con Content-Disposition: scarichiamo subito il blob della
+   * risposta, senza polling/endpoint di download per id (non persistiti).
+   */
+  const exportAndDownload = useCallback(async (format: 'json' | 'csv' = 'json') => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await apiClient.post(
+        '/api/v1/gdpr/data-export',
+        { format, includeHistory: true },
+        { responseType: 'blob' }
+      );
+
+      const mime = format === 'csv' ? 'text/csv' : 'application/json';
+      const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([typeof response.data === 'string' ? response.data : JSON.stringify(response.data)], { type: mime });
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const timestamp = new Date().toISOString().split('T')[0];
+      link.href = url;
+      link.download = `gdpr-data-export-${timestamp}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      // Aggiorna lo storico (l'export viene loggato lato backend)
+      await fetchExportRequests();
+    } catch (err) {
+      const errorMessage = 'Errore nell\'esportazione dei dati';
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchExportRequests]);
+
+  /**
    * Refresh export requests
    */
   const refreshRequests = useCallback(async () => {
@@ -308,6 +352,7 @@ export const useDataExport = (): UseDataExportReturn => {
     loading,
     error,
     requestExport,
+    exportAndDownload,
     downloadExport,
     cancelExport,
     refreshRequests,
