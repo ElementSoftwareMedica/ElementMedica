@@ -425,8 +425,9 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                                     ref={el => {
                                         if (el) el.indeterminate = isSpecialtyPartial(specialty);
                                     }}
-                                    onChange={() => handleToggleSpecialty(specialty)}
-                                    className="w-3 h-3 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                    readOnly
+                                    tabIndex={-1}
+                                    className="w-3 h-3 rounded border-gray-300 text-teal-600 focus:ring-teal-500 pointer-events-none"
                                 />
                                 <span className="font-medium text-gray-600">{specialty}</span>
                                 <span className="text-gray-400 ml-auto">({docs.length})</span>
@@ -441,10 +442,6 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                                 <label
                                     key={`${specialty}-${medico.id}`}
                                     className="flex items-center gap-2 px-3 py-1 cursor-pointer hover:bg-gray-50"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        onFilterMedicoToggle(medico.id);
-                                    }}
                                 >
                                     <input
                                         type="checkbox"

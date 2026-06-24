@@ -22,6 +22,7 @@ import {
     Clock,
     Users,
     Building2,
+    Stethoscope,
     RefreshCw,
     X,
     Check,
@@ -295,8 +296,8 @@ export const CalendarioPage: React.FC = () => {
         ambulatorioId: null
     });
     const [quickAddInfo, setQuickAddInfo] = useState<{ date: Date; hour: number; ambulatorioId: string; isOverbooking?: boolean; existingCount?: number } | null>(null);
-    // Layout fisso "per ambulatorio": il toggle Ambulatorio/Medico (non funzionante) è stato rimosso.
-    const [calendarLayoutMode] = useState<'ambulatorio' | 'medico'>('ambulatorio');
+    // Organizzazione colonne calendario: per ambulatorio (per giorno) o per medico.
+    const [calendarLayoutMode, setCalendarLayoutMode] = useState<'ambulatorio' | 'medico'>('ambulatorio');
     const [availabilityModalInfo, setAvailabilityModalInfo] = useState<{ date: Date; startHour: number; endHour: number; ambulatorioId: string; medicoId?: string; ambulatori?: Ambulatorio[] } | null>(null);
     const [draggingEvent, setDraggingEvent] = useState<DragItem | null>(null);
     // Appuntamento selezionato per modifica (apre il booking modal in edit mode)
@@ -1747,6 +1748,25 @@ export const CalendarioPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {/* Layout Mode Toggle - organizza le colonne per ambulatorio (per giorno) o per medico */}
+                        <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                            <button
+                                onClick={() => setCalendarLayoutMode('ambulatorio')}
+                                className={`px-3 py-1.5 text-sm font-medium rounded flex items-center gap-1.5 ${calendarLayoutMode === 'ambulatorio' ? 'bg-white dark:bg-gray-600 shadow text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
+                                title="Vista per ambulatorio"
+                            >
+                                <Building2 className="h-4 w-4" />
+                                <span className="hidden lg:inline">Ambulatorio</span>
+                            </button>
+                            <button
+                                onClick={() => setCalendarLayoutMode('medico')}
+                                className={`px-3 py-1.5 text-sm font-medium rounded flex items-center gap-1.5 ${calendarLayoutMode === 'medico' ? 'bg-white dark:bg-gray-600 shadow text-teal-700 dark:text-teal-300' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
+                                title="Vista per medico"
+                            >
+                                <Stethoscope className="h-4 w-4" />
+                                <span className="hidden lg:inline">Medico</span>
+                            </button>
+                        </div>
 
                         {/* Show Only Availability Toggle */}
                         <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
