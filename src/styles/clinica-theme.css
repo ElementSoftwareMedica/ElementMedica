@@ -494,6 +494,37 @@
 }
 
 /* ============================================
+   CLINICA DARK MODE OVERRIDES
+   Le helper class clinica hardcodano superfici chiare: in dark mode (.dark)
+   vanno adattate per coerenza con il tema globale su entrambi i branch.
+   ============================================ */
+
+.dark .btn-clinica-secondary {
+    background: #1f2937; /* gray-800 */
+    color: var(--clinica-primary-300);
+    border-color: #374151; /* gray-700 */
+}
+
+.dark .btn-clinica-secondary:hover {
+    background: #374151; /* gray-700 */
+    border-color: var(--clinica-primary-600);
+}
+
+.dark .btn-clinica-ghost {
+    color: var(--clinica-primary-400);
+}
+
+.dark .btn-clinica-ghost:hover {
+    background: rgba(13, 148, 136, 0.12); /* teal-600 @ 12% */
+}
+
+.dark .card-clinica,
+.dark .card-clinica-accent {
+    background: #1f2937; /* gray-800 */
+    border-color: #374151; /* gray-700 */
+}
+
+/* ============================================
    CLINICA PRINT STYLES
    ============================================ */
 

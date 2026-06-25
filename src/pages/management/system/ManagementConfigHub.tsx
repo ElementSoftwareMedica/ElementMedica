@@ -42,7 +42,7 @@ const CONFIG_TABS: ConfigTab[] = [
         id: 'sistema',
         label: 'Config Sistema',
         icon: <Settings2 className="h-4 w-4" />,
-        description: 'Sicurezza, feature flags e preferenze tema',
+        description: 'Preferenze tema dell\'interfaccia (chiaro/scuro/automatico)',
     },
 ];
 

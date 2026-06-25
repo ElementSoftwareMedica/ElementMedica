@@ -20,6 +20,7 @@ import nodemailer from 'nodemailer';
 import logger from '../utils/logger.js';
 import { emailQueue } from './queueService.js';
 import prisma from '../config/prisma-optimization.js';
+import { resolveBranchForType, communicationTypeForTemplate } from './messaging/messagingRouting.js';
 
 // ============================================
 // CONFIGURATION
@@ -902,13 +903,31 @@ export class EmailService {
         throw new Error(`Email template '${template}' not found`);
       }
 
+      // Routing: se il chiamante non ha indicato un branch esplicito, risolvilo dal
+      // routing configurato in /management/config#messaging in base alla tipologia
+      // di comunicazione associata al template (es. BENVENUTO_ACCOUNT → CREDENTIALS).
+      let resolvedBranch = branchType || data?.branchType || null;
+      if (tenantId && !resolvedBranch) {
+        const communicationType = communicationTypeForTemplate(template);
+        const routing = await resolveBranchForType(tenantId, communicationType);
+        if (routing) {
+          if (routing.smtpBranch === 'DISABLED') {
+            logger.info('Canale email disabilitato dal routing per la tipologia', {
+              component: 'EmailService', template, communicationType, tenantId
+            });
+            return { success: false, skipped: true, reason: 'channel_disabled' };
+          }
+          resolvedBranch = routing.smtpBranch;
+        }
+      }
+
       // Resolve transporter: tenant-specific SMTP > global env SMTP
       let transport = null;
       let tenantFromEmail = null;
       let tenantFromName = null;
       if (tenantId) {
         try {
-          const tenantSmtp = await getTenantSmtpTransporter(tenantId, branchType || data?.branchType);
+          const tenantSmtp = await getTenantSmtpTransporter(tenantId, resolvedBranch);
           if (tenantSmtp) {
             transport = tenantSmtp.transport;
             tenantFromEmail = tenantSmtp.fromEmail;

@@ -20,6 +20,7 @@ import { requirePermissions } from '../middleware/rbac.js';
 import logger from '../utils/logger.js';
 import prisma from '../config/prisma-optimization.js';
 import { getEffectiveTenantId } from '../utils/tenantHelper.js';
+import { COMMUNICATION_TYPES, VALID_BRANCH_TYPES } from '../services/messaging/messagingRouting.js';
 
 const router = express.Router();
 const authenticateToken = authenticate; // Catena A: direct middleware
@@ -37,9 +38,8 @@ const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || null;
 const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v19.0';
 const WHATSAPP_DEFAULT_PHONE_NUMBER_ID = process.env.WHATSAPP_DEFAULT_PHONE_NUMBER_ID || null;
 
-// Valid branch types for messaging configuration
-// DISABLED = non usare questo canale per questa tipologia di comunicazione
-const VALID_BRANCH_TYPES = ['FORMAZIONE', 'CLINICA', 'default', 'DISABLED'];
+// VALID_BRANCH_TYPES e COMMUNICATION_TYPES sono importati da
+// services/messaging/messagingRouting.js (single source of truth).
 
 // ============================================
 // UTILITIES
@@ -1052,32 +1052,7 @@ router.get(
 // MESSAGING ROUTING CONFIGURATION
 // ============================================
 
-/**
- * Tipi di comunicazione supportati
- * Organizzati per area funzionale
- */
-const COMMUNICATION_TYPES = [
-    // === FORMAZIONE ===
-    'INVOICES_COURSES',    // Fatture corsi formazione
-    'CERTIFICATES',        // Attestati formazione
-    'COURSES_RSPP',        // Comunicazioni corsi RSPP/sicurezza
-
-    // === CLINICA ===
-    'MEDICAL_REPORTS',     // Referti visite mediche
-    'APPOINTMENTS',        // Promemoria appuntamenti
-    'INSPECTIONS',         // Sopralluoghi aziendali
-    'NOMINATIONS',         // Nomine (medico competente, RSPP)
-
-    // === COMMERCIALE ===
-    'QUOTES',              // Preventivi (corsi e visite)
-    'COMPANY_TARIFFS',     // Tariffari aziendali
-
-    // === TRASVERSALI ===
-    'CREDENTIALS',         // Credenziali utente
-    'MARKETING',           // Comunicazioni marketing (newsletter, promozioni brand)
-    'PROMOTIONAL',         // Offerte promozionali (sconti, offerte limitate)
-    'GENERAL'              // Comunicazioni generali (default)
-];
+// COMMUNICATION_TYPES è importato da services/messaging/messagingRouting.js
 
 /**
  * GET /api/v1/messaging/routing
@@ -1319,52 +1294,7 @@ router.put(
     }
 );
 
-/**
- * Utility function: Get config for a communication type
- * Usata da altri servizi per ottenere la config SMTP/WhatsApp corretta
- */
-export async function getMessagingConfigForType(tenantId, communicationType) {
-    try {
-        const tenant = await prisma.tenant.findFirst({
-            where: { id: tenantId, deletedAt: null },
-            select: { settings: true }
-        });
-
-        if (!tenant?.settings) {
-            return { smtp: null, whatsapp: null, pec: null };
-        }
-
-        const settings = tenant.settings;
-        const routing = settings.messagingRouting || {};
-        const typeRouting = routing[communicationType] || {
-            smtpBranch: 'default',
-            whatsappBranch: 'default',
-            pecEnabled: false
-        };
-
-        const smtpConfig = getConfigForBranch(settings.smtp || {}, typeRouting.smtpBranch);
-        const whatsappConfig = getConfigForBranch(settings.whatsapp || {}, typeRouting.whatsappBranch);
-
-        // Decripta password SMTP se presente
-        if (smtpConfig?.password) {
-            smtpConfig.password = decrypt(smtpConfig.password);
-        }
-
-        return {
-            smtp: smtpConfig,
-            whatsapp: whatsappConfig,
-            pecEnabled: typeRouting.pecEnabled,
-            routing: typeRouting
-        };
-
-    } catch (error) {
-        logger.error('Error getting messaging config for type:', {
-            error: 'Operazione non riuscita',
-            tenantId,
-            communicationType
-        });
-        return { smtp: null, whatsapp: null, pec: null };
-    }
-}
+// La risoluzione del routing per i servizi di invio è ora centralizzata in
+// services/messaging/messagingRouting.js (resolveBranchForType / getSmtpSendConfigForBranch).
 
 export default router;

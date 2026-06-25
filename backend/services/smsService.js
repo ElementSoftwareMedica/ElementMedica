@@ -19,6 +19,7 @@
 import twilio from 'twilio';
 import logger from '../utils/logger.js';
 import prisma from '../config/prisma-optimization.js';
+import { sendWhatsAppMessage } from './messaging/whatsappSender.js';
 
 // ============================================
 // CONFIGURATION
@@ -261,46 +262,57 @@ export class SMSService {
     }
 
     /**
-     * Send WhatsApp message
-     * @param {Object} options - Same as sendSMS
+     * Send WhatsApp message via Meta WhatsApp Business Cloud API.
+     * Provider standardizzato su Meta Cloud (vedi services/messaging/whatsappSender.js).
+     * Supporta sia chiamate con template+data sia con `message` diretto.
+     * @param {Object} options
+     * @param {string} options.to - numero destinatario
+     * @param {string} [options.template] - nome template (MESSAGE_TEMPLATES)
+     * @param {Object} [options.data] - dati per il template
+     * @param {string} [options.message] - testo diretto (alternativo al template)
+     * @param {string} [options.tenantId]
+     * @param {string} [options.branchType]
+     * @param {string} [options.communicationType] - tipologia per il routing messaggistica
      */
-    static async sendWhatsApp({ to, template, data, tenantId }) {
+    static async sendWhatsApp({ to, template, data, message, tenantId, branchType, communicationType }) {
         try {
-            const client = getTwilioClient();
-
-            if (!client) {
-                throw new Error('Twilio not configured');
+            // Risolvi il corpo del messaggio: template processato oppure testo diretto.
+            let body = message || data?.message || data?.body || null;
+            if (!body && template) {
+                const templateDef = MESSAGE_TEMPLATES[template];
+                if (!templateDef) {
+                    throw new Error(`WhatsApp template '${template}' not found`);
+                }
+                body = processTemplate(templateDef.whatsapp, data);
+            }
+            if (!body) {
+                throw new Error('Nessun contenuto per il messaggio WhatsApp');
             }
 
-            const templateDef = MESSAGE_TEMPLATES[template];
-            if (!templateDef) {
-                throw new Error(`WhatsApp template '${template}' not found`);
+            const result = await sendWhatsAppMessage({ tenantId, to, body, branchType, communicationType });
+
+            if (!result.success) {
+                if (result.skipped) {
+                    logger.info('WhatsApp message skipped', {
+                        component: 'SMSService', action: 'sendWhatsApp', template, reason: result.error, tenantId
+                    });
+                    return { success: false, skipped: true, reason: result.error };
+                }
+                throw new Error(result.error || 'WhatsApp delivery failed');
             }
-
-            // Process template
-            const body = processTemplate(templateDef.whatsapp, data);
-
-            // Format phone number with whatsapp prefix
-            const formattedTo = `whatsapp:${this._formatPhoneNumber(to)}`;
-
-            const message = await client.messages.create({
-                body,
-                from: getFromNumber('whatsapp'),
-                to: formattedTo
-            });
 
             logger.info('WhatsApp message sent successfully', {
                 component: 'SMSService',
                 action: 'sendWhatsApp',
                 template,
-                messageSid: message.sid,
+                messageSid: result.messageId,
                 tenantId
             });
 
             return {
                 success: true,
-                messageSid: message.sid,
-                status: message.status
+                messageSid: result.messageId,
+                status: 'sent'
             };
         } catch (error) {
             logger.error('Failed to send WhatsApp message', {

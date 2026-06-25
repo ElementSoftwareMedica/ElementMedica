@@ -815,25 +815,12 @@ const MessagingConfigPage: React.FC = () => {
     };
 
     return (
-        <div className="container mx-auto p-6 max-w-4xl">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold flex items-center gap-2">
-                        <Send className="w-6 h-6 text-blue-600" />
-                        Configurazione Messaggistica
-                    </h1>
-                    <p className="text-gray-500 dark:text-gray-400 mt-1">
-                        Configura i canali di comunicazione per l'invio di notifiche e credenziali
-                    </p>
-                </div>
-            </div>
-
+        <div className="p-6 space-y-6">
             {/* Branch Selector */}
-            <Card className="mb-6">
+            <Card className="border-violet-100 dark:border-violet-900/40">
                 <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                        <Globe className="w-4 h-4" />
+                    <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-gray-50">
+                        <Globe className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                         Seleziona Branch
                     </CardTitle>
                     <CardDescription>
@@ -862,7 +849,7 @@ const MessagingConfigPage: React.FC = () => {
                             </Button>
                         ))}
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                         Configurazione attuale: <strong>{getBranchLabel(selectedBranch)}</strong> - {BRANCH_OPTIONS.find(o => o.value === selectedBranch)?.description}
                     </p>
                 </CardContent>
@@ -1578,7 +1565,7 @@ const MessagingConfigPage: React.FC = () => {
                                                     };
 
                                                     return (
-                                                        <div key={commType} className="p-4 border rounded-lg space-y-4 bg-gray-50/50">
+                                                        <div key={commType} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg space-y-4 bg-gray-50/50 dark:bg-gray-800/40">
                                                             <div className="flex items-center gap-3">
                                                                 <span className="text-2xl">{typeInfo.icon}</span>
                                                                 <div>

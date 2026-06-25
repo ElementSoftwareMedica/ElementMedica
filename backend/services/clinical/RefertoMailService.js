@@ -20,6 +20,7 @@ import logger from '../../utils/logger.js';
 import { VisitaRefertoService } from './VisitaRefertoService.js';
 import TenantPecConfigService from './TenantPecConfigService.js';
 import EmailTemplateService from './EmailTemplateService.js';
+import { resolveBranchForType, getSmtpSendConfigForBranch } from '../messaging/messagingRouting.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -157,8 +158,28 @@ class RefertoMailService {
             }
             const pdfBuffer = readFileSync(absPath);
 
-            // 4. Configurazione email tenant
-            const emailCfg = await TenantPecConfigService.getConfigForSending(tenantId);
+            // 4. Configurazione email tenant — routing-aware (MEDICAL_REPORTS)
+            // Il routing di /management/config#messaging decide se usare la PEC oppure
+            // un branch SMTP specifico per l'invio dei referti.
+            const routing = await resolveBranchForType(tenantId, 'MEDICAL_REPORTS');
+            let emailCfg = null;
+
+            if (routing && routing.smtpBranch === 'DISABLED' && !routing.pecEnabled) {
+                logger.info({ component: 'RefertoMailService', visitaId },
+                    'P71: invio referto via email disabilitato dal routing');
+                return { sent: false, error: 'channel_disabled' };
+            }
+
+            // Se il routing indica un branch SMTP esplicito (non default) e la PEC non è
+            // richiesta, usa la configurazione SMTP di quel branch.
+            if (routing && !routing.pecEnabled && routing.smtpBranch && routing.smtpBranch !== 'default') {
+                emailCfg = await getSmtpSendConfigForBranch(tenantId, routing.smtpBranch);
+            }
+
+            // Fallback (default): configurazione PEC/email del tenant.
+            if (!emailCfg) {
+                emailCfg = await TenantPecConfigService.getConfigForSending(tenantId);
+            }
             if (!emailCfg) throw new Error('Configurazione email/PEC non disponibile');
 
             // 5. Info clinica e medico
